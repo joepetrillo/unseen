@@ -1,0 +1,52 @@
+import prettier from 'eslint-config-prettier';
+import path from 'node:path';
+import js from '@eslint/js';
+import svelte from 'eslint-plugin-svelte';
+import { defineConfig, includeIgnoreFile } from 'eslint/config';
+import globals from 'globals';
+import ts from 'typescript-eslint';
+
+const gitignorePath = path.resolve(import.meta.dirname, '.gitignore');
+
+export default defineConfig(
+	includeIgnoreFile(gitignorePath),
+	js.configs.recommended,
+	// "Type-checked" configs use TypeScript's type information, so they can catch
+	// things plain linting can't: unsafe `any` usage, unhandled promises, impossible conditions.
+	ts.configs.strictTypeChecked,
+	ts.configs.stylisticTypeChecked,
+	svelte.configs.recommended,
+	// Prettier owns formatting; these turn off lint rules that would fight it.
+	prettier,
+	svelte.configs.prettier,
+	{
+		languageOptions: {
+			globals: { ...globals.browser, ...globals.node },
+			parserOptions: {
+				// Lets typescript-eslint find the right tsconfig for each file automatically.
+				projectService: true,
+				tsconfigRootDir: import.meta.dirname,
+				extraFileExtensions: ['.svelte']
+			}
+		},
+		rules: {
+			// TypeScript already reports undefined variables, and more accurately.
+			// https://typescript-eslint.io/troubleshooting/faqs/eslint/#i-get-errors-from-the-no-undef-rule-about-global-variables-not-being-defined-even-though-there-are-no-typescript-errors
+			'no-undef': 'off'
+		}
+	},
+	{
+		// Inside .svelte files, the <script lang="ts"> block is parsed with the TypeScript parser.
+		files: ['**/*.svelte', '**/*.svelte.ts', '**/*.svelte.js'],
+		languageOptions: {
+			parserOptions: {
+				parser: ts.parser
+			}
+		}
+	},
+	{
+		// Plain JS config files aren't part of the TypeScript project, so skip type-aware rules there.
+		files: ['**/*.js'],
+		extends: [ts.configs.disableTypeChecked]
+	}
+);
