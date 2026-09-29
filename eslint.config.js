@@ -16,7 +16,8 @@ export default defineConfig(
 	ts.configs.strictTypeChecked,
 	ts.configs.stylisticTypeChecked,
 	svelte.configs.recommended,
-	// Prettier owns formatting; these turn off lint rules that would fight it.
+	// oxfmt owns formatting. These configs only switch off ESLint's style rules so the two never
+	// disagree (they're named after Prettier, but work with any formatter).
 	prettier,
 	svelte.configs.prettier,
 	{

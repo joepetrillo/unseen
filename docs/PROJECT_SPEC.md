@@ -157,21 +157,21 @@ Other rules:
 
 ## 6. Tech stack (decided)
 
-| Area             | Choice                                                                                          | Why                                                                                             |
-| ---------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Framework        | Svelte 5 + SvelteKit                                                                            | Learning goal                                                                                   |
-| Language         | TypeScript (strict)                                                                             |                                                                                                 |
-| Styling          | Tailwind CSS                                                                                    |                                                                                                 |
-| Components       | shadcn-svelte (built on Bits UI), Bits UI directly for custom pieces                            | Headless, accessible, owned code                                                                |
-| Database         | Neon Postgres                                                                                   | Relational data; the deck is a SQL exclusion query                                              |
-| DB library       | Drizzle (Neon serverless driver for transactions)                                               | Reads like SQL, so it teaches what's happening                                                  |
-| Auth             | Better Auth, **email one-time code only** (email OTP plugin)                                    | Works across devices (read email on laptop, sign in on phone), unlike magic links. No passwords |
-| Auth rate limits | Better Auth rate limiting with **database storage**                                             | In-memory limits don't work across serverless instances                                         |
-| Hosting          | Vercel                                                                                          | Near-zero config for SvelteKit                                                                  |
-| Catalog sync     | GitHub Actions scheduled workflow (first seed run locally)                                      | Free, no serverless time limits                                                                 |
-| Tests            | Vitest (unit/integration), Playwright (end-to-end)                                              |                                                                                                 |
-| Lint/format      | ESLint (eslint-plugin-svelte + typescript-eslint strict type-checked) + Prettier + svelte-check | See section 9                                                                                   |
-| Package manager  | Bun                                                                                             |                                                                                                 |
+| Area             | Choice                                                                                       | Why                                                                                             |
+| ---------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Framework        | Svelte 5 + SvelteKit                                                                         | Learning goal                                                                                   |
+| Language         | TypeScript (strict)                                                                          |                                                                                                 |
+| Styling          | Tailwind CSS                                                                                 |                                                                                                 |
+| Components       | shadcn-svelte (built on Bits UI), Bits UI directly for custom pieces                         | Headless, accessible, owned code                                                                |
+| Database         | Neon Postgres                                                                                | Relational data; the deck is a SQL exclusion query                                              |
+| DB library       | Drizzle (Neon serverless driver for transactions)                                            | Reads like SQL, so it teaches what's happening                                                  |
+| Auth             | Better Auth, **email one-time code only** (email OTP plugin)                                 | Works across devices (read email on laptop, sign in on phone), unlike magic links. No passwords |
+| Auth rate limits | Better Auth rate limiting with **database storage**                                          | In-memory limits don't work across serverless instances                                         |
+| Hosting          | Vercel                                                                                       | Near-zero config for SvelteKit                                                                  |
+| Catalog sync     | GitHub Actions scheduled workflow (first seed run locally)                                   | Free, no serverless time limits                                                                 |
+| Tests            | Vitest (unit/integration), Playwright (end-to-end)                                           |                                                                                                 |
+| Lint/format      | ESLint (eslint-plugin-svelte + typescript-eslint strict type-checked) + oxfmt + svelte-check | See section 9                                                                                   |
+| Package manager  | Bun                                                                                          |                                                                                                 |
 
 Not needed for v1: WebSockets or real-time services, Redis, job queues (BullMQ), Kafka, a separate caching layer.
 
@@ -184,20 +184,9 @@ Not needed for v1: WebSockets or real-time services, Redis, job queues (BullMQ),
 - How auto-close runs (checked on read vs. a scheduled job)
 - Email provider for login codes (e.g. Resend)
 
-## 8. Next step: project setup
+## 8. Project setup and build order
 
-Before the first Claude Code session (done by me):
-
-1. Node.js LTS and a package manager installed.
-2. Accounts: GitHub, Neon, TMDB (request an API key), Vercel. An email provider can wait until auth.
-3. Project created with `npx sv create` (minimal template, TypeScript). Add Tailwind, Drizzle (PostgreSQL + Neon), Vitest, Playwright, Vercel adapter if offered. Skip ESLint/Prettier (Ultracite handles them) and auth (added later).
-4. `CLAUDE.md` in the root, this file at `docs/PROJECT_SPEC.md`, `git init`, first commit.
-
-First session (with Claude Code):
-
-1. Walk me through every generated file and what it does before writing any features.
-2. Set up Ultracite (ESLint backend), `svelte-check`, TypeScript strict mode, and environment variables (`.env` plus `.env.example`, never committing secrets). Fill in the Commands section of `CLAUDE.md`.
-3. Connect Neon via Drizzle and design the first schema together.
+Project lives at `~/Documents/Projects/unseen`. Scaffolded with `sv create` (minimal, TypeScript) plus Tailwind, Drizzle (PostgreSQL + Neon), Vitest, Playwright, the Vercel adapter, and ESLint. Formatting uses oxfmt. Package manager: Bun.
 
 ### Build order (one stage at a time)
 
@@ -230,12 +219,13 @@ Design the schema with the whole spec in mind, but build features in stages. Eac
 
 <!-- Update at the end of each stage: stage number, status, date, follow-ups. -->
 
-- Not started.
+- **Stage 1 — in progress (2026-09-29).** Done: scaffold, strict lint/format/type-check setup, CI workflow, first commits. Remaining: walkthrough of generated files, push to GitHub, connect Vercel, confirm CI green and the app loads at its Vercel URL. Example files (`src/lib/vitest-examples`, `src/routes/demo`) stay until stage 2 as working examples of tests.
 
 ## 9. Linting and formatting decision
 
 - **ESLint:** the official Svelte setup (`sv add eslint`: eslint-plugin-svelte, which understands markup, runes, and SvelteKit conventions) upgraded to typescript-eslint's **strictTypeChecked + stylisticTypeChecked** configs.
-- **Prettier** with `prettier-plugin-svelte` and `prettier-plugin-tailwindcss` (class sorting reads `src/routes/layout.css`).
+- **oxfmt** formats everything, including `.svelte` files, and sorts Tailwind classes (reads `src/routes/layout.css`). Config: `.oxfmtrc.json`. Chosen over Prettier (Sep 2026): its Svelte support is still labeled experimental, but on this repo and a stress-test component it produced output identical to Prettier + prettier-plugin-svelte + prettier-plugin-tailwindcss, with one tool instead of three. Fallback if it ever mangles a file: `oxfmt --migrate` has a Prettier counterpart, and Prettier's config is a few lines.
+- `eslint-config-prettier` stays: it only switches off ESLint style rules so ESLint never fights the formatter.
 - **svelte-check** with `--fail-on-warnings`.
 - TypeScript `strict` plus `noUncheckedIndexedAccess`.
 - CI (GitHub Actions) runs lint, svelte-check, unit tests, and build on every push and PR.

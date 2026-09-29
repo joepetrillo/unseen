@@ -11,7 +11,7 @@ SvelteKit app that finds movies nobody in a group has seen. Full spec, scope, an
 
 ## Stack
 
-SvelteKit (Svelte 5, TypeScript strict) · Tailwind · shadcn-svelte / Bits UI · Neon Postgres · Drizzle · Better Auth (email one-time code only) · Vercel · GitHub Actions (catalog sync) · Vitest · Playwright · ESLint (eslint-plugin-svelte + typescript-eslint strict type-checked) · Prettier · svelte-check · Bun
+SvelteKit (Svelte 5, TypeScript strict) · Tailwind · shadcn-svelte / Bits UI · Neon Postgres · Drizzle · Better Auth (email one-time code only) · Vercel · GitHub Actions (catalog sync) · Vitest · Playwright · ESLint (eslint-plugin-svelte + typescript-eslint strict type-checked) · oxfmt · svelte-check · Bun
 
 ## Code rules
 

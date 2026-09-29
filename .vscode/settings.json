@@ -1,7 +1,7 @@
 {
 	"editor.formatOnSave": true,
-	"editor.defaultFormatter": "esbenp.prettier-vscode",
-	"[svelte]": { "editor.defaultFormatter": "svelte.svelte-vscode" },
+	"editor.defaultFormatter": "oxc.oxc-vscode",
+	"[svelte]": { "editor.defaultFormatter": "oxc.oxc-vscode" },
 	"eslint.validate": ["javascript", "typescript", "svelte"],
 	"files.associations": { "*.css": "tailwindcss" }
 }
