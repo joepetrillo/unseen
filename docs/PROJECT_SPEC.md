@@ -233,6 +233,12 @@ Design the schema with the whole spec in mind, but build features in stages. Eac
   - `drizzle.config.ts` still reads `DATABASE_URL`; switch it to `DIRECT_URL` (section 5b).
   - `src/env.ts` validates with a hand-written function; switch to a schema once a validation library is added.
   - Example files (`src/lib/vitest-examples`, `src/routes/demo`) stay until stage 2 as working examples of tests.
+- **Stage 2 — done (2026-09-30).** All stage 1 follow-ups resolved. Neon via the Vercel integration (separate Development and Production databases, section 5b); `pg` pool + Drizzle v1 with relations v2; `movies`, `genres`, `movie_genres` with the first migration; Production migrates on every deploy (`vercel.json`). Zod adopted for all external input. TMDB client + `toMovieRow` (unit-tested); seed of the 300 most-voted movies with details: second run inserted 0 and updated 300 (dev), Production seeded with `db:seed:prod`. `/dev/movies` lists them with posters, locally and at https://unseen-sooty-ten.vercel.app/dev/movies. Scaffold examples replaced by real tests (6 mapping, 2 component, 1 e2e). Follow-ups:
+  - `/dev/movies` is public; remove it or put it behind auth in stage 3.
+  - Preview deployments have no database variables and would fail to build; enable Neon preview branching if we start using PRs.
+  - Database integration tests (and a database in CI) start in stage 4, the first stage whose checks need them.
+  - Vote-count floor (open detail) and the full, resumable catalog sync remain stage 9. Discover currently has no floor; the top 300 are far above any plausible one.
+  - Build warns about optional modules (`pg-native`, `cloudflare:sockets`, `bufferutil`); harmless, they're never loaded on Vercel's Node runtime.
 
 ## 9. Linting and formatting decision
 
