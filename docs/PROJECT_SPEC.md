@@ -1,6 +1,6 @@
 # Project Spec: Group "Unseen Movie" Finder
 
-Full product spec and decision log. `CLAUDE.md` holds the short, always-loaded rules; this file holds the details and the reasoning behind them. Update it when decisions change.
+Full product spec and decision log. `AGENTS.md` holds the short, always-loaded rules; this file holds the details and the reasoning behind them. Update it when decisions change.
 
 **Design principle for correctness:** prefer deriving state from a few stored facts over storing and syncing extra state. Simple but strong.
 
