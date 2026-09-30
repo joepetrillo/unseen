@@ -2,7 +2,7 @@ import { defineConfig } from "oxfmt";
 
 // Based on Ultracite's oxfmt preset, trimmed to the options that differ from oxfmt's defaults.
 export default defineConfig({
-  ignorePatterns: ["bun.lock", "/static/"],
+  ignorePatterns: ["bun.lock", "/static/", "/.agents/**", "/.claude/**"],
   printWidth: 80,
   proseWrap: "never",
   sortImports: true,

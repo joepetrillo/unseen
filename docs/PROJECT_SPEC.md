@@ -222,7 +222,7 @@ Design the schema with the whole spec in mind, but build features in stages. Eac
 
 <!-- Update at the end of each stage: stage number, status, date, follow-ups. -->
 
-- **Stage 1 — in progress (2026-09-29).** Done: scaffold, strict lint/type-check setup, oxfmt, CI workflow, `AGENTS.md`, SvelteKit 3 (pre-release) + Drizzle v1 (RC) migration, Vitest 5, `outdated:next` script, database connection plan (section 5b). Remaining: walkthrough of generated files, push to GitHub, connect Vercel, confirm CI green and the app loads at its Vercel URL. Example files (`src/lib/vitest-examples`, `src/routes/demo`) stay until stage 2 as working examples of tests.
+- **Stage 1 — in progress (2026-09-29).** Done: scaffold, strict lint/type-check setup, oxfmt, CI workflow, `AGENTS.md`, SvelteKit 3 (pre-release) + Drizzle v1 (RC) migration, Vitest 5, `outdated:next` script, database connection plan (section 5b), Svelte AI tools (remote Svelte MCP in `.cursor/mcp.json` + `.mcp.json`, skills in `.agents/skills`, usage rules in `AGENTS.md`). Remaining: walkthrough of generated files, push to GitHub, connect Vercel, confirm CI green and the app loads at its Vercel URL. Example files (`src/lib/vitest-examples`, `src/routes/demo`) stay until stage 2 as working examples of tests.
 
 ## 9. Linting and formatting decision
 

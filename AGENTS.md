@@ -21,6 +21,15 @@ Most tutorials and training data use SvelteKit 2 and Drizzle 0.x. Use the new AP
 - **Drizzle v1:** `drizzle({ client, relations })`, relations via `defineRelations`, relational queries v2. Docs: https://orm.drizzle.team (v1 pages). Better Auth uses `@better-auth/drizzle-adapter/relations-v2`.
 - Kit, the Vercel adapter, drizzle-orm, and drizzle-kit are pinned to exact versions. `bun outdated` can't see their updates; run `bun run outdated:next` at the start of each stage. Upgrade deliberately, in pairs (kit + adapter-vercel, drizzle-orm + drizzle-kit), then `bun run verify`.
 
+## Svelte AI tools
+
+The Svelte MCP server (`svelte`) and the `svelte-code-writer` / `svelte-core-bestpractices` skills are installed.
+
+- **Svelte 5:** look things up with `get-documentation` (call `list-sections` only when you don't know the section path). Load `svelte-core-bestpractices` before writing components.
+- **SvelteKit:** the MCP serves SvelteKit 2 docs (`$lib`, `$app/environment`, `svelte.config.js`). Fetch the SvelteKit 3 page instead: `https://next.svelte.dev/docs/kit/<slug>/llms.txt`, where `<slug>` is the MCP path without `kit/` (e.g. `form-actions`, `$app-env`). What changed from 2: `https://next.svelte.dev/docs/kit/migrating-to-sveltekit-3/llms.txt`. When sources disagree, the pre-release rules above win.
+- **Validate:** after creating or editing any `.svelte`, `.svelte.ts`, or `.svelte.js` file, run `svelte-autofixer` on it and repeat until it returns no issues or suggestions. If the MCP isn't connected, use the CLI from `svelte-code-writer` (`npx @sveltejs/mcp svelte-autofixer <path>`).
+- **`playground-link`:** only for code not written to project files, and only after asking me.
+
 ## Code rules
 
 - No `any`; use `unknown` and narrow. Validate all external input (forms, URL params, TMDB responses) with a schema library and derive types from the schemas.
