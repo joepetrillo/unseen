@@ -9,6 +9,10 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      # src/env.ts requires DATABASE_URL, and the build checks it. CI never talks to
+      # the database, so a placeholder is enough. Vercel gets the real value.
+      DATABASE_URL: postgres://ci:ci@localhost:5432/ci
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2

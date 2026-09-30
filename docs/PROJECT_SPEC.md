@@ -159,12 +159,12 @@ Other rules:
 
 | Area | Choice | Why |
 | --- | --- | --- |
-| Framework | Svelte 5 + SvelteKit | Learning goal |
+| Framework | Svelte 5 + SvelteKit 3 (pre-release, pinned) | Learning goal. Adopted before stable (Sep 2026) because migrating an empty project is nearly free; stable was expected soon with no further breaking changes |
 | Language | TypeScript (strict) |  |
 | Styling | Tailwind CSS |  |
 | Components | shadcn-svelte (built on Bits UI), Bits UI directly for custom pieces | Headless, accessible, owned code |
 | Database | Neon Postgres | Relational data; the deck is a SQL exclusion query |
-| DB library | Drizzle (Neon serverless driver for transactions) | Reads like SQL, so it teaches what's happening |
+| DB library | Drizzle v1 release candidate, pinned (Neon serverless driver for transactions) | Reads like SQL, so it teaches what's happening. v1 chosen so the relations/query API learned is the one that stays; Better Auth supports it via its relations-v2 adapter |
 | Auth | Better Auth, **email one-time code only** (email OTP plugin) | Works across devices (read email on laptop, sign in on phone), unlike magic links. No passwords |
 | Auth rate limits | Better Auth rate limiting with **database storage** | In-memory limits don't work across serverless instances |
 | Hosting | Vercel | Near-zero config for SvelteKit |

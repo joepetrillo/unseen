@@ -1,8 +1,8 @@
 <script lang="ts">
-  import favicon from "$lib/assets/favicon.svg";
+  import type { Snippet } from "svelte";
 
   import "./layout.css";
-  import type { Snippet } from "svelte";
+  import favicon from "#lib/assets/favicon.svg";
 
   let { children }: { children: Snippet } = $props();
 </script>

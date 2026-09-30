@@ -14,18 +14,6 @@ export default defineConfig({
           filename.split(/[/\\]/).includes("node_modules") ? undefined : true,
       },
       adapter: adapter(),
-      typescript: {
-        // Adds root-level config files to the generated tsconfig so they get type-checked too.
-        config: (config) => {
-          const include: unknown = config.include;
-          if (Array.isArray(include))
-            include.push(
-              "../drizzle.config.ts",
-              "../playwright.config.ts",
-              "../oxfmt.config.ts"
-            );
-        },
-      },
     }),
   ],
   test: {

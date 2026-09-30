@@ -11,14 +11,22 @@ SvelteKit app that finds movies nobody in a group has seen. Full spec, scope, an
 
 ## Stack
 
-SvelteKit (Svelte 5, TypeScript strict) · Tailwind · shadcn-svelte / Bits UI · Neon Postgres · Drizzle · Better Auth (email one-time code only) · Vercel · GitHub Actions (catalog sync) · Vitest · Playwright · ESLint (eslint-plugin-svelte + typescript-eslint strict type-checked) · oxfmt · svelte-check · Bun
+SvelteKit 3 (pre-release) (Svelte 5, TypeScript strict) · Tailwind · shadcn-svelte / Bits UI · Neon Postgres · Drizzle v1 (release candidate) · Better Auth (email one-time code only) · Vercel · GitHub Actions (catalog sync) · Vitest · Playwright · ESLint (eslint-plugin-svelte + typescript-eslint strict type-checked) · oxfmt · svelte-check · Bun
+
+## Pre-release versions (easy to get wrong from memory)
+
+Most tutorials and training data use SvelteKit 2 and Drizzle 0.x. Use the new APIs:
+
+- **SvelteKit 3:** import from `#lib/...` with file extensions (`#lib/server/db/index.ts`), not `$lib`. Use `$app/env`, not `$app/environment`; `$app/state`, not `$app/stores`. Declare env vars in `src/env.ts` (`defineEnvVars`) and import them from `$app/env/private` or `$app/env/public`. Docs: https://next.svelte.dev/docs/kit. No remote functions (still experimental).
+- **Drizzle v1:** `drizzle({ client, relations })`, relations via `defineRelations`, relational queries v2. Docs: https://orm.drizzle.team (v1 pages). Better Auth uses `@better-auth/drizzle-adapter/relations-v2`.
+- Kit, the Vercel adapter, drizzle-orm, and drizzle-kit are pinned to exact versions. Upgrade them deliberately; drizzle-orm and drizzle-kit always move together.
 
 ## Code rules
 
 - No `any`; use `unknown` and narrow. Validate all external input (forms, URL params, TMDB responses) with a schema library and derive types from the schemas.
 - Use SvelteKit's generated `$types`, Drizzle schema types, and typed `$props`.
 - Svelte 5 runes only. Use `$effect` only when nothing else works.
-- Server-only code (database, secrets, TMDB) lives in `$lib/server`. Forms use form actions with `use:enhance`.
+- Server-only code (database, secrets, TMDB) lives in `src/lib/server` (imported as `#lib/server/...`). Forms use form actions with `use:enhance`.
 - Comments explain _why_ and non-obvious logic, not what the code says. Briefly explain Svelte-specific patterns.
 - Never commit secrets. Keep `.env.example` in sync with `.env`.
 
