@@ -3,8 +3,8 @@
  * rows are keyed by TMDB ID and upserted, so a second run updates in place
  * and inserts nothing.
  *
- * Run: `bun run db:seed` for the dev database (DATABASE_URL from .env.local),
- * or `bun run db:seed:prod` for Production (see scripts/seed-prod.sh).
+ * Run: `bun run db:seed` (DATABASE_URL from .env.local, so the dev database).
+ * Production's catalog is owned by the scheduled sync job (stage 9), not this.
  * TMDB_READ_ACCESS_TOKEN is a Development-only Secret on Vercel (the deployed
  * app never calls TMDB), pulled into .env.local with the database URLs.
  */
