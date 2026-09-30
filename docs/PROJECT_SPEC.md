@@ -216,7 +216,7 @@ Design the schema with the whole spec in mind, but build features in stages. Eac
 7. **Group sessions.** Multiple participants, polling fingerprint, the four session states. _Done when:_ two browsers on different accounts see each other's answers within seconds and reach a shared match, and tests cover simultaneous answers, stale poll responses, and polling during saves.
 8. **Session lifecycle.** Accepting session invites, host removal and transfer, rejoining, Resume/Start fresh, 24-hour auto-close, past matches. _Done when:_ each rule in the spec's Participants and Sessions sections has a passing test.
 9. **Full catalog sync.** Partitioned seed, enrichment, scheduled GitHub Actions job, alerts. _Done when:_ the full catalog is loaded, a scheduled run succeeds, an interrupted run resumes, and a forced failure sends an alert.
-10. **Launch.** TMDB attribution and terms check, production email provider, error pages, ordering metrics. _Done when:_ you and your brother use it for a real movie night.
+10. **Launch.** TMDB attribution and terms check, production email provider, error pages, ordering metrics. Revisit: branch protection on `main` requiring the CI `verify` check (until then we push straight to `main`), and moving CI off the pinned `ubuntu-24.04` runner. _Done when:_ you and your brother use it for a real movie night.
 
 ### Progress
 

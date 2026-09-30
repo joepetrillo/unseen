@@ -8,7 +8,9 @@ on:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # Pinned rather than ubuntu-latest (moving to Ubuntu 26 from Oct 2026): Playwright's
+    # --with-deps system packages can lag a new Ubuntu release. Revisit at launch (spec stage 10).
+    runs-on: ubuntu-24.04
     env:
       # src/env.ts requires DATABASE_URL, and the build checks it. CI never talks to
       # the database, so a placeholder is enough. Vercel gets the real value.
