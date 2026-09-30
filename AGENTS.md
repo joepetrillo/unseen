@@ -27,7 +27,7 @@ Most tutorials and training data use SvelteKit 2 and Drizzle 0.x. Use the new AP
 - Use SvelteKit's generated `$types`, Drizzle schema types, and typed `$props`.
 - Svelte 5 runes only. Use `$effect` only when nothing else works.
 - Server-only code (database, secrets, TMDB) lives in `src/lib/server` (imported as `#lib/server/...`). Forms use form actions with `use:enhance`.
-- Comments explain _why_ and non-obvious logic, not what the code says. Briefly explain Svelte-specific patterns.
+- Comments explain _why_ and non-obvious logic, not what the code says: short one- or two-liners above the relevant line (e.g. "Runs once per instance: Node caches modules, so every import shares this pool."). Briefly explain Svelte-specific patterns and platform behavior the same way.
 - Never commit secrets. Keep `.env.example` in sync with `.env`.
 
 ## Architecture rules (easy to get wrong)
