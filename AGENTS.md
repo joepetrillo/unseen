@@ -33,6 +33,7 @@ Most tutorials and training data use SvelteKit 2 and Drizzle 0.x. Use the new AP
 ## Architecture rules (easy to get wrong)
 
 - Prefer deriving state from stored facts over storing extra state.
+- Database: `pg` pool via Drizzle's `node-postgres` driver, created once at module level (max 1–2), `DATABASE_URL` = Neon pooled string, `DIRECT_URL` for drizzle-kit only, registered with `attachDatabasePool`. Details: spec section 5b.
 - Server code runs on Vercel Fluid compute: one instance serves many requests at once. Never keep per-request or per-user data in module-level variables; use `event.locals`. Shared clients (e.g. the database pool) belong at module level.
 - TMDB is never called during a user session. The deck comes from our own `movies` catalog table, kept updated by a scheduled sync job.
 - Only "seen" is stored per user. "Not seen" lives only in `session_answers`. A missing seen entry means unknown, never not seen.

@@ -138,7 +138,7 @@ Other rules:
 - **Idempotency:** every mutation carries a client-generated **action ID**. Retrying a request that already succeeded returns the stored result and changes nothing.
 - **Transactions:** each mutation (answer, undo, participant change, seen-list edit) runs in one transaction that bumps **every counter it affects**. A Seen answer changes both the session and the user's seen list, so it bumps `sessions.revision` and `users.seen_version`.
 - **Stale requests:** answers carry their participation ID and movie ID. Requests for an old participation or a closed session are rejected. A late Not seen on an eliminated movie is ignored; a Seen always updates the seen list.
-- **Driver:** Neon's HTTP driver can't do interactive transactions; use the Neon serverless (WebSocket) driver with Drizzle for transactional writes. Confirm current guidance at setup.
+- **Driver:** one TCP connection pool (see section 5b); transactions work over it directly.
 - **Required tests:** simultaneous answers on the same movie, retry after a successful save, action ID reused with different input, undo conflicts (Seen confirmed again elsewhere), cross-session seen updates, participant removal and rejoin, host leaving, stale poll responses, session closure.
 
 ## 5. Updates between users: polling, designed to be swappable
@@ -155,6 +155,19 @@ Other rules:
   - Client: `subscribeToSession(sessionId, onChange)`, polls and reloads only when the fingerprint changed.
   - Switching to a real-time service (Ably/Pusher/PartyKit, or self-hosted WebSockets + Redis pub/sub) means rewriting only these boundaries; the fingerprint logic stays as the safety net.
 
+## 5b. Database connections
+
+Server code runs as Node.js functions on Vercel **Fluid compute**: one warm instance serves many requests at once, so it can hold and reuse connections like a small traditional server. Following Neon's and Vercel's guidance for that setup:
+
+- **Driver:** `pg` (node-postgres) with Drizzle's `node-postgres` driver. Normal TCP connections, so interactive transactions work. No HTTP or WebSocket driver needed.
+- **One pool per instance, at module level** (`src/lib/server/db/`), `max` 1–2 connections. Never create a client inside a request handler.
+- **`DATABASE_URL` = Neon's pooled connection string** (hostname contains `-pooler`). Neon's PgBouncer multiplexes many client connections onto a few real Postgres connections, which prevents the "connection storm" when instances scale up.
+- **`DIRECT_URL` = the direct (non-pooler) string**, used only by `drizzle-kit` for migrations, which need a real session.
+- **`attachDatabasePool(pool)`** from `@vercel/functions` closes idle connections before Vercel suspends an instance, so they don't leak.
+- **Region:** create the Neon project in AWS `us-east-1`, next to Vercel's default function region `iad1`.
+- Rejected: Neon's HTTP driver (can't run interactive transactions; built for one-request-per-instance platforms) and its WebSocket driver (for runtimes without TCP, like edge; we don't use edge, and Kit 3 dropped edge support on Vercel).
+- Sources: [Neon serverless connection pooling](https://neon.com/docs/guides/serverless-connection-pooling), [Vercel Fluid compute](https://vercel.com/docs/fluid-compute).
+
 ## 6. Tech stack (decided)
 
 | Area | Choice | Why |
@@ -164,7 +177,7 @@ Other rules:
 | Styling | Tailwind CSS |  |
 | Components | shadcn-svelte (built on Bits UI), Bits UI directly for custom pieces | Headless, accessible, owned code |
 | Database | Neon Postgres | Relational data; the deck is a SQL exclusion query |
-| DB library | Drizzle v1 release candidate, pinned (Neon serverless driver for transactions) | Reads like SQL, so it teaches what's happening. v1 chosen so the relations/query API learned is the one that stays; Better Auth supports it via its relations-v2 adapter |
+| DB library | Drizzle v1 release candidate, pinned (`node-postgres` driver over Neon's pooler; see section 5b) | Reads like SQL, so it teaches what's happening. v1 chosen so the relations/query API learned is the one that stays; Better Auth supports it via its relations-v2 adapter |
 | Auth | Better Auth, **email one-time code only** (email OTP plugin) | Works across devices (read email on laptop, sign in on phone), unlike magic links. No passwords |
 | Auth rate limits | Better Auth rate limiting with **database storage** | In-memory limits don't work across serverless instances |
 | Hosting | Vercel | Near-zero config for SvelteKit |
@@ -195,7 +208,7 @@ Design the schema with the whole spec in mind, but build features in stages. Eac
 **Every stage ends the same way:** lint, svelte-check, and tests pass; changes committed and deployed to Vercel; the Progress list below updated with the stage status and any follow-ups.
 
 1. **Setup and deploy.** Tooling, strict TypeScript, env vars, CI. _Done when:_ the app loads at its Vercel URL, and CI runs lint, svelte-check, and tests green.
-2. **Database and small catalog.** Drizzle + Neon, `movies` table, seed script for a few hundred movies. _Done when:_ a dev page lists seeded movies with posters, and re-running the seed creates no duplicates.
+2. **Database and small catalog.** Drizzle + Neon (connections per section 5b; replace the scaffold's `neon-http` setup), `movies` table, seed script for a few hundred movies. _Done when:_ a dev page lists seeded movies with posters, and re-running the seed creates no duplicates.
 3. **Auth.** Better Auth with email codes, protected routes. _Done when:_ you can sign in with a code on phone and laptop, signed-out users get redirected, and an end-to-end test covers sign-in.
 4. **Seen list.** The seen-list module (action IDs, transactions, `seen_version`) and the My Seen Movies page: add from a catalog search, search, filter, remove. _Done when:_ the page works on the live site, and tests prove a retried action changes nothing and a reused action ID with different input fails.
 5. **Groups and invites.** Create a group, invite someone, permission checks. _Done when:_ a second account can join your group, and a test proves non-members can't read or change it.
