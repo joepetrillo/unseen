@@ -19,7 +19,7 @@ Most tutorials and training data use SvelteKit 2 and Drizzle 0.x. Use the new AP
 
 - **SvelteKit 3:** import from `#lib/...` with file extensions (`#lib/server/db/index.ts`), not `$lib`. Use `$app/env`, not `$app/environment`; `$app/state`, not `$app/stores`. Declare env vars in `src/env.ts` (`defineEnvVars`) and import them from `$app/env/private` or `$app/env/public`. Docs: https://next.svelte.dev/docs/kit. No remote functions (still experimental).
 - **Drizzle v1:** `drizzle({ client, relations })`, relations via `defineRelations`, relational queries v2. Docs: https://orm.drizzle.team (v1 pages). Better Auth uses `@better-auth/drizzle-adapter/relations-v2`.
-- Kit, the Vercel adapter, drizzle-orm, and drizzle-kit are pinned to exact versions. Upgrade them deliberately; drizzle-orm and drizzle-kit always move together.
+- Kit, the Vercel adapter, drizzle-orm, and drizzle-kit are pinned to exact versions. `bun outdated` can't see their updates; run `bun run outdated:next` at the start of each stage. Upgrade deliberately, in pairs (kit + adapter-vercel, drizzle-orm + drizzle-kit), then `bun run verify`.
 
 ## Code rules
 
@@ -33,6 +33,7 @@ Most tutorials and training data use SvelteKit 2 and Drizzle 0.x. Use the new AP
 ## Architecture rules (easy to get wrong)
 
 - Prefer deriving state from stored facts over storing extra state.
+- Server code runs on Vercel Fluid compute: one instance serves many requests at once. Never keep per-request or per-user data in module-level variables; use `event.locals`. Shared clients (e.g. the database pool) belong at module level.
 - TMDB is never called during a user session. The deck comes from our own `movies` catalog table, kept updated by a scheduled sync job.
 - Only "seen" is stored per user. "Not seen" lives only in `session_answers`. A missing seen entry means unknown, never not seen.
 - Matches are derived: every current participant answered Not seen and none has it in their seen list. Never stored; filters and catalog data don't affect existing matches.
@@ -49,6 +50,7 @@ Package manager is **bun**.
 
 - `bun run dev` — dev server
 - `bun run verify` — lint + svelte-check + unit tests (run before finishing any change)
+- `bun run outdated:next` — check pinned pre-release packages for updates (run at the start of each stage)
 - `bun run lint` / `bun run fix` — check / auto-fix formatting and lint
 - `bun run check` — svelte-check (type errors in markup, compiler and a11y warnings; warnings fail)
 - `bun run test:unit --run` / `bun run test:e2e` — Vitest / Playwright
