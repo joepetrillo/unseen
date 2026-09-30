@@ -208,7 +208,7 @@ Design the schema with the whole spec in mind, but build features in stages. Eac
 **Every stage ends the same way:** lint, svelte-check, and tests pass; changes committed and deployed to Vercel; the Progress list below updated with the stage status and any follow-ups.
 
 1. **Setup and deploy.** Tooling, strict TypeScript, env vars, CI. _Done when:_ the app loads at its Vercel URL, and CI runs lint, svelte-check, and tests green.
-2. **Database and small catalog.** Drizzle + Neon (connections per section 5b; replace the scaffold's `neon-http` setup), `movies` table, seed script for a few hundred movies. _Done when:_ a dev page lists seeded movies with posters, and re-running the seed creates no duplicates.
+2. **Database and small catalog.** Drizzle + Neon (connections per section 5b; replace the scaffold's `neon-http` setup: remove `@neondatabase/serverless`, add `pg`, rewrite `src/lib/server/db/index.ts`), `movies` table, seed script for a few hundred movies. _Done when:_ a dev page lists seeded movies with posters, and re-running the seed creates no duplicates.
 3. **Auth.** Better Auth with email codes, protected routes. _Done when:_ you can sign in with a code on phone and laptop, signed-out users get redirected, and an end-to-end test covers sign-in.
 4. **Seen list.** The seen-list module (action IDs, transactions, `seen_version`) and the My Seen Movies page: add from a catalog search, search, filter, remove. _Done when:_ the page works on the live site, and tests prove a retried action changes nothing and a reused action ID with different input fails.
 5. **Groups and invites.** Create a group, invite someone, permission checks. _Done when:_ a second account can join your group, and a test proves non-members can't read or change it.

@@ -9,10 +9,6 @@ SvelteKit app that finds movies nobody in a group has seen. Full spec, scope, an
 - Be concise. No filler.
 - Svelte 5, SvelteKit, Better Auth, and Drizzle change fast: check current docs rather than relying on memory.
 
-## Stack
-
-SvelteKit 3 (pre-release) (Svelte 5, TypeScript strict) · Tailwind · shadcn-svelte / Bits UI · Neon Postgres · Drizzle v1 (release candidate) · Better Auth (email one-time code only) · Vercel · GitHub Actions (catalog sync) · Vitest · Playwright · ESLint (eslint-plugin-svelte + typescript-eslint strict type-checked) · oxfmt · svelte-check · Bun
-
 ## Pre-release versions (easy to get wrong from memory)
 
 Most tutorials and training data use SvelteKit 2 and Drizzle 0.x. Use the new APIs:
@@ -56,16 +52,7 @@ The Svelte MCP server (`svelte`) and the `svelte-code-writer` / `svelte-core-bes
 
 ## Commands
 
-Package manager is **bun**.
-
-- `bun run dev` — dev server
-- `bun run verify` — lint + svelte-check + unit tests (run before finishing any change)
-- `bun run outdated:next` — check pinned pre-release packages for updates (run at the start of each stage)
-- `bun run lint` / `bun run fix` — check / auto-fix formatting and lint
-- `bun run check` — svelte-check (type errors in markup, compiler and a11y warnings; warnings fail)
-- `bun run test:unit --run` / `bun run test:e2e` — Vitest / Playwright
-- `bun run build` — production build
-- `bun run db:generate` / `db:migrate` / `db:push` / `db:studio` — Drizzle
+Package manager is **bun**. Scripts are in `package.json`. `bun run verify` = lint + svelte-check + unit tests. Vitest defaults to watch mode, so pass `--run` (`bun run test:unit --run`).
 
 ## Before finishing any change
 
