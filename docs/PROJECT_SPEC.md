@@ -157,21 +157,21 @@ Other rules:
 
 ## 6. Tech stack (decided)
 
-| Area             | Choice                                                                                       | Why                                                                                             |
-| ---------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Framework        | Svelte 5 + SvelteKit                                                                         | Learning goal                                                                                   |
-| Language         | TypeScript (strict)                                                                          |                                                                                                 |
-| Styling          | Tailwind CSS                                                                                 |                                                                                                 |
-| Components       | shadcn-svelte (built on Bits UI), Bits UI directly for custom pieces                         | Headless, accessible, owned code                                                                |
-| Database         | Neon Postgres                                                                                | Relational data; the deck is a SQL exclusion query                                              |
-| DB library       | Drizzle (Neon serverless driver for transactions)                                            | Reads like SQL, so it teaches what's happening                                                  |
-| Auth             | Better Auth, **email one-time code only** (email OTP plugin)                                 | Works across devices (read email on laptop, sign in on phone), unlike magic links. No passwords |
-| Auth rate limits | Better Auth rate limiting with **database storage**                                          | In-memory limits don't work across serverless instances                                         |
-| Hosting          | Vercel                                                                                       | Near-zero config for SvelteKit                                                                  |
-| Catalog sync     | GitHub Actions scheduled workflow (first seed run locally)                                   | Free, no serverless time limits                                                                 |
-| Tests            | Vitest (unit/integration), Playwright (end-to-end)                                           |                                                                                                 |
-| Lint/format      | ESLint (eslint-plugin-svelte + typescript-eslint strict type-checked) + oxfmt + svelte-check | See section 9                                                                                   |
-| Package manager  | Bun                                                                                          |                                                                                                 |
+| Area | Choice | Why |
+| --- | --- | --- |
+| Framework | Svelte 5 + SvelteKit | Learning goal |
+| Language | TypeScript (strict) |  |
+| Styling | Tailwind CSS |  |
+| Components | shadcn-svelte (built on Bits UI), Bits UI directly for custom pieces | Headless, accessible, owned code |
+| Database | Neon Postgres | Relational data; the deck is a SQL exclusion query |
+| DB library | Drizzle (Neon serverless driver for transactions) | Reads like SQL, so it teaches what's happening |
+| Auth | Better Auth, **email one-time code only** (email OTP plugin) | Works across devices (read email on laptop, sign in on phone), unlike magic links. No passwords |
+| Auth rate limits | Better Auth rate limiting with **database storage** | In-memory limits don't work across serverless instances |
+| Hosting | Vercel | Near-zero config for SvelteKit |
+| Catalog sync | GitHub Actions scheduled workflow (first seed run locally) | Free, no serverless time limits |
+| Tests | Vitest (unit/integration), Playwright (end-to-end) |  |
+| Lint/format | ESLint (eslint-plugin-svelte + typescript-eslint strict type-checked) + oxfmt + svelte-check | See section 9 |
+| Package manager | Bun |  |
 
 Not needed for v1: WebSockets or real-time services, Redis, job queues (BullMQ), Kafka, a separate caching layer.
 
@@ -194,26 +194,16 @@ Design the schema with the whole spec in mind, but build features in stages. Eac
 
 **Every stage ends the same way:** lint, svelte-check, and tests pass; changes committed and deployed to Vercel; the Progress list below updated with the stage status and any follow-ups.
 
-1. **Setup and deploy.** Tooling, strict TypeScript, env vars, CI.
-   _Done when:_ the app loads at its Vercel URL, and CI runs lint, svelte-check, and tests green.
-2. **Database and small catalog.** Drizzle + Neon, `movies` table, seed script for a few hundred movies.
-   _Done when:_ a dev page lists seeded movies with posters, and re-running the seed creates no duplicates.
-3. **Auth.** Better Auth with email codes, protected routes.
-   _Done when:_ you can sign in with a code on phone and laptop, signed-out users get redirected, and an end-to-end test covers sign-in.
-4. **Seen list.** The seen-list module (action IDs, transactions, `seen_version`) and the My Seen Movies page: add from a catalog search, search, filter, remove.
-   _Done when:_ the page works on the live site, and tests prove a retried action changes nothing and a reused action ID with different input fails.
-5. **Groups and invites.** Create a group, invite someone, permission checks.
-   _Done when:_ a second account can join your group, and a test proves non-members can't read or change it.
-6. **Solo session.** Session in a group with just you: deck query and ordering, filters, Seen/Not seen, matches, shortlist with "Actually, I've seen this", undo, where-to-watch link.
-   _Done when:_ you can find unseen movies alone start to finish, and tests cover deck order, seen exclusion, filters, and undo conflicts.
-7. **Group sessions.** Multiple participants, polling fingerprint, the four session states.
-   _Done when:_ two browsers on different accounts see each other's answers within seconds and reach a shared match, and tests cover simultaneous answers, stale poll responses, and polling during saves.
-8. **Session lifecycle.** Accepting session invites, host removal and transfer, rejoining, Resume/Start fresh, 24-hour auto-close, past matches.
-   _Done when:_ each rule in the spec's Participants and Sessions sections has a passing test.
-9. **Full catalog sync.** Partitioned seed, enrichment, scheduled GitHub Actions job, alerts.
-   _Done when:_ the full catalog is loaded, a scheduled run succeeds, an interrupted run resumes, and a forced failure sends an alert.
-10. **Launch.** TMDB attribution and terms check, production email provider, error pages, ordering metrics.
-    _Done when:_ you and your brother use it for a real movie night.
+1. **Setup and deploy.** Tooling, strict TypeScript, env vars, CI. _Done when:_ the app loads at its Vercel URL, and CI runs lint, svelte-check, and tests green.
+2. **Database and small catalog.** Drizzle + Neon, `movies` table, seed script for a few hundred movies. _Done when:_ a dev page lists seeded movies with posters, and re-running the seed creates no duplicates.
+3. **Auth.** Better Auth with email codes, protected routes. _Done when:_ you can sign in with a code on phone and laptop, signed-out users get redirected, and an end-to-end test covers sign-in.
+4. **Seen list.** The seen-list module (action IDs, transactions, `seen_version`) and the My Seen Movies page: add from a catalog search, search, filter, remove. _Done when:_ the page works on the live site, and tests prove a retried action changes nothing and a reused action ID with different input fails.
+5. **Groups and invites.** Create a group, invite someone, permission checks. _Done when:_ a second account can join your group, and a test proves non-members can't read or change it.
+6. **Solo session.** Session in a group with just you: deck query and ordering, filters, Seen/Not seen, matches, shortlist with "Actually, I've seen this", undo, where-to-watch link. _Done when:_ you can find unseen movies alone start to finish, and tests cover deck order, seen exclusion, filters, and undo conflicts.
+7. **Group sessions.** Multiple participants, polling fingerprint, the four session states. _Done when:_ two browsers on different accounts see each other's answers within seconds and reach a shared match, and tests cover simultaneous answers, stale poll responses, and polling during saves.
+8. **Session lifecycle.** Accepting session invites, host removal and transfer, rejoining, Resume/Start fresh, 24-hour auto-close, past matches. _Done when:_ each rule in the spec's Participants and Sessions sections has a passing test.
+9. **Full catalog sync.** Partitioned seed, enrichment, scheduled GitHub Actions job, alerts. _Done when:_ the full catalog is loaded, a scheduled run succeeds, an interrupted run resumes, and a forced failure sends an alert.
+10. **Launch.** TMDB attribution and terms check, production email provider, error pages, ordering metrics. _Done when:_ you and your brother use it for a real movie night.
 
 ### Progress
 
@@ -224,7 +214,7 @@ Design the schema with the whole spec in mind, but build features in stages. Eac
 ## 9. Linting and formatting decision
 
 - **ESLint:** the official Svelte setup (`sv add eslint`: eslint-plugin-svelte, which understands markup, runes, and SvelteKit conventions) upgraded to typescript-eslint's **strictTypeChecked + stylisticTypeChecked** configs.
-- **oxfmt** formats everything, including `.svelte` files, and sorts Tailwind classes (reads `src/routes/layout.css`). Config: `.oxfmtrc.json`. Chosen over Prettier (Sep 2026): its Svelte support is still labeled experimental, but on this repo and a stress-test component it produced output identical to Prettier + prettier-plugin-svelte + prettier-plugin-tailwindcss, with one tool instead of three. Fallback if it ever mangles a file: `oxfmt --migrate` has a Prettier counterpart, and Prettier's config is a few lines.
+- **oxfmt** formats everything, including `.svelte` files, and sorts Tailwind classes (reads `src/routes/layout.css`). Config: `oxfmt.config.ts`. Chosen over Prettier (Sep 2026): its Svelte support is still labeled experimental, but on this repo and a stress-test component it produced output identical to Prettier + prettier-plugin-svelte + prettier-plugin-tailwindcss, with one tool instead of three. Fallback if it ever mangles a file: `oxfmt --migrate` has a Prettier counterpart, and Prettier's config is a few lines.
 - `eslint-config-prettier` stays: it only switches off ESLint style rules so ESLint never fights the formatter.
 - **svelte-check** with `--fail-on-warnings`.
 - TypeScript `strict` plus `noUncheckedIndexedAccess`.
