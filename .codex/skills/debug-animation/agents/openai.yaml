@@ -1,3 +1,0 @@
-interface:
-  display_name: "Debug Animation"
-  short_description: "Diagnose why an animation feels wrong before fixing it"
