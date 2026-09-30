@@ -162,9 +162,14 @@ Server code runs as Node.js functions on Vercel **Fluid compute**: one warm inst
 - **Driver:** `pg` (node-postgres) with Drizzle's `node-postgres` driver. Normal TCP connections, so interactive transactions work. No HTTP or WebSocket driver needed.
 - **One pool per instance, at module level** (`src/lib/server/db/`), `max` 1–2 connections. Never create a client inside a request handler.
 - **`DATABASE_URL` = Neon's pooled connection string** (hostname contains `-pooler`). Neon's PgBouncer multiplexes many client connections onto a few real Postgres connections, which prevents the "connection storm" when instances scale up.
-- **`DIRECT_URL` = the direct (non-pooler) string**, used only by `drizzle-kit` for migrations, which need a real session.
+- **`DATABASE_URL_UNPOOLED` = the direct (non-pooler) string**, used only by `drizzle-kit` for migrations, which need a real session. (Named by Neon's Vercel integration, which sets both variables on Vercel for every environment.)
 - **`attachDatabasePool(pool)`** from `@vercel/functions` closes idle connections before Vercel suspends an instance, so they don't leak.
 - **Region:** create the Neon project in AWS `us-east-1`, next to Vercel's default function region `iad1`.
+- **Provisioning:** Neon's Vercel Marketplace integration (Free plan, `iad1`, Neon's managed auth off because we use Better Auth). Same plans and prices as a direct Neon account; billing and plan changes go through Vercel, and the Neon CLI needs an API key instead of `neon login`.
+- **Databases per environment:** Vercel's Production and Development environments point at separate Neon endpoints, so local work never touches production data. Preview has no database yet (fine while we push straight to `main`; enable Neon preview branching if we start using PR previews).
+- **Local setup:** Vercel holds every variable (including `TMDB_READ_ACCESS_TOKEN`, a Development-only Secret: the deployed app never calls TMDB, and Production Secrets can't be pulled); `vercel env pull` writes the Development values to `.env.local`, the only local env file. drizzle-kit only auto-loads `.env`, so `drizzle.config.ts` loads `.env.local` explicitly; without that, migrations went to whatever `.env` held (this happened once, Sep 30 2026). `vercel env run -e production` overlays `.env.local` on Production's values, so production-targeted commands pull to a temp file instead (`scripts/seed-prod.sh`).
+- **Migrations:** `drizzle-kit generate` writes SQL files to `drizzle/` (committed); `drizzle-kit migrate` applies them (locally: dev database). Production migrates during every Vercel deploy (`vercel.json` build command: `db:migrate && build`). The old deployment keeps serving until the new one is ready, so migrations must be backward compatible; a failed migration fails the deploy and the old version keeps running. Never `drizzle-kit push`.
+- **TLS:** Neon's URLs say `sslmode=require`; `withVerifiedTls` (db/url.ts) rewrites it to `verify-full` so certificate checks survive pg v9, where `require` stops verifying.
 - Rejected: Neon's HTTP driver (can't run interactive transactions; built for one-request-per-instance platforms) and its WebSocket driver (for runtimes without TCP, like edge; we don't use edge, and Kit 3 dropped edge support on Vercel).
 - Sources: [Neon serverless connection pooling](https://neon.com/docs/guides/serverless-connection-pooling), [Vercel Fluid compute](https://vercel.com/docs/fluid-compute).
 
@@ -178,6 +183,7 @@ Server code runs as Node.js functions on Vercel **Fluid compute**: one warm inst
 | Components | shadcn-svelte (built on Bits UI), Bits UI directly for custom pieces | Headless, accessible, owned code |
 | Database | Neon Postgres | Relational data; the deck is a SQL exclusion query |
 | DB library | Drizzle v1 release candidate, pinned (`node-postgres` driver over Neon's pooler; see section 5b) | Reads like SQL, so it teaches what's happening. v1 chosen so the relations/query API learned is the one that stays; Better Auth supports it via its relations-v2 adapter |
+| Validation | Zod 4 | All external input (TMDB, env vars, later forms and URL params); types come from `z.infer`. Chosen over Valibot/ArkType (Sep 2026) for familiarity and ecosystem: Better Auth already depends on it, Kit's `defineEnvVars` accepts it (Standard Schema) |
 | Auth | Better Auth, **email one-time code only** (email OTP plugin) | Works across devices (read email on laptop, sign in on phone), unlike magic links. No passwords |
 | Auth rate limits | Better Auth rate limiting with **database storage** | In-memory limits don't work across serverless instances |
 | Hosting | Vercel | Near-zero config for SvelteKit |

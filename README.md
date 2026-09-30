@@ -11,7 +11,8 @@ Requires Node 24 and [Bun](https://bun.sh).
 
 ```sh
 bun install
-cp .env.example .env   # then fill in the values
+vercel link && vercel env pull   # writes .env.local (see .env.example)
+bun run db:migrate
 bun run dev
 ```
 
