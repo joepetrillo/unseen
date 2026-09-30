@@ -14,7 +14,12 @@ jobs:
       # the database, so a placeholder is enough. Vercel gets the real value.
       DATABASE_URL: postgres://ci:ci@localhost:5432/ci
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      # Bun installs and runs scripts, but Vite and SvelteKit run on Node (their bins use
+      # `#!/usr/bin/env node`). Pin it so CI doesn't depend on the runner's preinstalled version.
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
       - uses: oven-sh/setup-bun@v2
 
       # --frozen-lockfile fails if bun.lock is out of date, so CI installs exactly what we tested locally.
