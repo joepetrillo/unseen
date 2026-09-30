@@ -222,7 +222,11 @@ Design the schema with the whole spec in mind, but build features in stages. Eac
 
 <!-- Update at the end of each stage: stage number, status, date, follow-ups. -->
 
-- **Stage 1 — in progress (2026-09-29).** Done: scaffold, strict lint/type-check setup, oxfmt, CI workflow, `AGENTS.md`, SvelteKit 3 (pre-release) + Drizzle v1 (RC) migration, Vitest 5, `outdated:next` script, database connection plan (section 5b), Svelte AI tools (remote Svelte MCP in `.cursor/mcp.json` + `.mcp.json`, skills in `.agents/skills`, usage rules in `AGENTS.md`). Remaining: walkthrough of generated files, push to GitHub, connect Vercel, confirm CI green and the app loads at its Vercel URL. Example files (`src/lib/vitest-examples`, `src/routes/demo`) stay until stage 2 as working examples of tests.
+- **Stage 1 — done (2026-09-30).** Scaffold, strict lint/type-check setup, oxfmt, CI workflow, `AGENTS.md`, SvelteKit 3 (pre-release, now `next.31`) + Drizzle v1 (RC), Vitest 5, `outdated:next` script, database connection plan (section 5b), Svelte AI tools (remote Svelte MCP in `.cursor/mcp.json` + `.mcp.json`, skills in `.agents/skills`). Node pinned to `24.x` via `engines` (read by CI's `setup-node` and by Vercel). Repo: [joepetrillo/unseen](https://github.com/joepetrillo/unseen) (public). Vercel project `joes-projects-dab9d62e/unseen`, Git-connected (push to `main` deploys production); live at https://unseen-sooty-ten.vercel.app. Follow-ups for stage 2:
+  - Vercel's `DATABASE_URL` (Production + Preview) is a **placeholder**: the build validates `src/env.ts`, but nothing queries the database yet. Replace it with the Neon pooled string and add `DIRECT_URL`.
+  - `drizzle.config.ts` still reads `DATABASE_URL`; switch it to `DIRECT_URL` (section 5b).
+  - `src/env.ts` validates with a hand-written function; switch to a schema once a validation library is added.
+  - Example files (`src/lib/vitest-examples`, `src/routes/demo`) stay until stage 2 as working examples of tests.
 
 ## 9. Linting and formatting decision
 
