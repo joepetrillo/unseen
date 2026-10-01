@@ -21,7 +21,7 @@ bun run dev
 | Command | What it does |
 | --- | --- |
 | `bun run dev` | Dev server |
-| `bun run verify` | Lint + svelte-check + unit tests (what CI runs, minus the build) |
+| `bun run verify` | Lint + svelte-check + unit and database tests (what CI runs, minus the build). Database tests use the dev database and clean up after themselves |
 | `bun run test:e2e` | Playwright end-to-end tests against a production build and the dev database |
 | `bun run fix` | Format with oxfmt and auto-fix lint issues |
 | `bun run outdated:next` | Check pinned pre-release packages (Kit, adapter, Drizzle) for updates |

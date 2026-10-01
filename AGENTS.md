@@ -14,6 +14,7 @@ SvelteKit app that finds movies nobody in a group has seen. Full spec, scope, an
 Most tutorials and training data use SvelteKit 2 and Drizzle 0.x. Use the new APIs:
 
 - **SvelteKit 3:** import from `#lib/...` with file extensions (`#lib/server/db/index.ts`), not `$lib`. Use `$app/env`, not `$app/environment`; `$app/state`, not `$app/stores`; `refreshAll`, not `invalidateAll`. Declare the app's env vars in `src/env.ts` (`defineEnvVars`) and import them from `$app/env/private` or `$app/env/public`. Scripts in `scripts/` run outside Kit, so they validate `process.env` themselves with Zod. Docs: https://next.svelte.dev/docs/kit. No remote functions (still experimental).
+- **Kit 3 form actions:** a relative action (`action="?/add"`) replaces the page's query string, so search params are lost after the submit. Keep them by appending `&/add` to `page.url.search` (see `src/routes/seen/SeenButton.svelte`).
 - **Drizzle v1:** `drizzle({ client, relations })`, relations via `defineRelations`, relational queries v2. Docs: https://orm.drizzle.team (v1 pages). Better Auth uses `@better-auth/drizzle-adapter/relations-v2`.
 - Kit, the Vercel adapter, drizzle-orm, and drizzle-kit are pinned to exact versions. `bun outdated` can't see their updates; run `bun run outdated:next` at the start of each stage. Upgrade deliberately, in pairs (kit + adapter-vercel, drizzle-orm + drizzle-kit), then `bun run verify`.
 
@@ -49,13 +50,13 @@ The Svelte MCP server (`svelte`) and the `svelte-code-writer` / `svelte-core-bes
 - One active watch session per group. Closed watch sessions reject all changes.
 - Deck order: previously matched last, then most confirmations, then TMDB **vote count** (not "popularity"), then movie ID. No cursors or offsets: fetch the top eligible unanswered movies, excluding ones already on screen.
 - Every server operation checks the permission it needs (answering requires an active participation; see spec section 4). The acting user comes from the auth session, never from request data.
-- Every mutation carries a client action ID (logged in `actions`) and runs in one transaction that bumps every affected counter (`watch_sessions.revision` and/or `users.seen_version`).
-- All seen-list changes go through one server module.
+- Every mutation carries a client action ID and runs through `runAction` (`#lib/server/actions.ts`): logged in `actions` and applied in one transaction that bumps every affected counter (`watch_sessions.revision` and/or `users.seen_version`). The browser keeps an ID until the server answers, so a retry resends it.
+- All seen-list changes go through one server module: `#lib/server/seen-list.ts`.
 - Live updates go through `notifyWatchSessionChanged()` (server) and `subscribeToWatchSession()` (client). Polling compares a fingerprint of watch session revision + participants' seen versions; nothing else may poll or depend on the mechanism.
 
 ## Commands
 
-Package manager is **bun**. Scripts are in `package.json`. `bun run verify` = lint + svelte-check + unit tests. Vitest defaults to watch mode, so pass `--run` (`bun run test:unit --run`).
+Package manager is **bun**. Scripts are in `package.json`. `bun run verify` = lint + svelte-check + unit and database tests. Database tests (and e2e) use the dev database from `.env.local`, creating their own rows and deleting them afterwards (helpers in `#lib/server/testing/`); CI gives them a throwaway Postgres. Vitest defaults to watch mode, so pass `--run` (`bun run test:unit --run`).
 
 Env files: Vercel is the single source of every variable (database URLs from Neon's integration, plus secrets like `TMDB_READ_ACCESS_TOKEN`, added with `vercel env add` as a Development-only Secret since only local scripts use it). `vercel env pull` writes the Development values to `.env.local`, the only local env file; it's overwritten on every pull, so never hand-edit it, and don't create `.env` or `.env.development.local` (tools disagree on whether they win over `.env.local`, which once sent a migration to Production). `.env.example` lists every name with fake values. `drizzle.config.ts` loads `.env.local` explicitly because drizzle-kit only auto-loads `.env`. Nothing local writes to Production: it changes only through deploy-time migrations and (from stage 9) the scheduled catalog sync in GitHub Actions, which gets its values as repo secrets. Don't add local production scripts; if one is ever unavoidable, ask first, and never use `vercel env run -e production` (it overlays `.env.local`, so it silently targets dev).
 

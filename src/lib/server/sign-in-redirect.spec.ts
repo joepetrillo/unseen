@@ -6,8 +6,8 @@ const ORIGIN = "https://unseen.test";
 
 describe("signInPath", () => {
   it("remembers the requested page, including its query", () => {
-    expect(signInPath(new URL(`${ORIGIN}/dev/movies?page=2`))).toBe(
-      "/sign-in?redirectTo=%2Fdev%2Fmovies%3Fpage%3D2"
+    expect(signInPath(new URL(`${ORIGIN}/seen?page=2`))).toBe(
+      "/sign-in?redirectTo=%2Fseen%3Fpage%3D2"
     );
   });
 
@@ -24,7 +24,7 @@ describe("pathAfterSignIn", () => {
   }
 
   it("returns to the requested page", () => {
-    expect(after("/dev/movies?page=2")).toBe("/dev/movies?page=2");
+    expect(after("/seen?page=2")).toBe("/seen?page=2");
   });
 
   it("goes home without a redirectTo", () => {
@@ -36,7 +36,7 @@ describe("pathAfterSignIn", () => {
     "/\\evil.com",
     // Browsers strip tabs and newlines from URLs, leaving "//evil.com".
     "/\t/evil.com",
-    "https://evil.com/dev/movies",
+    "https://evil.com/seen",
     "javascript:alert(1)",
   ])("refuses to leave the site (%j)", (redirectTo) => {
     expect(after(redirectTo)).toBe("/");

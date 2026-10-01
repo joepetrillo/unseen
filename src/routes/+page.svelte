@@ -26,8 +26,6 @@
     </p>
   {/if}
   <p class="mt-4 text-sm">
-    <a class="underline" href={resolve("dev/movies")}
-      >Browse the catalog (dev)</a
-    >
+    <a class="underline" href={resolve("seen")}>Your seen movies</a>
   </p>
 </main>

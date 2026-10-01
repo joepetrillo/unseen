@@ -4,11 +4,13 @@ import {
   date,
   index,
   integer,
+  pgEnum,
   pgTable,
   primaryKey,
   real,
   text,
   timestamp,
+  uuid,
 } from "drizzle-orm/pg-core";
 
 // Our copy of the TMDB catalog. The deck is dealt from here; TMDB is never
@@ -77,6 +79,9 @@ export const users = pgTable("users", {
     .defaultNow()
     .$onUpdate(() => new Date())
     .notNull(),
+  // Ours, not Better Auth's. Bumped by every change to the user's seen list
+  // (#lib/server/seen-list.ts), so polling can tell when it changed.
+  seenVersion: integer("seen_version").default(0).notNull(),
 });
 
 // Login sessions (the cookie points at a row here). Not to be confused with
@@ -175,3 +180,56 @@ export const signInCodeLimits = pgTable("sign_in_code_limits", {
   }).notNull(),
   count: integer("count").notNull(),
 });
+
+// Each user's seen list: one row per movie they've seen. Only "seen" is ever
+// stored; a missing row means unknown, never "not seen". Changed only through
+// #lib/server/seen-list.ts.
+export const seenMovies = pgTable(
+  "seen_movies",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // No cascade: deleting a catalog movie must never silently erase
+    // someone's seen entry, so such a delete fails instead.
+    movieId: integer("movie_id")
+      .notNull()
+      .references(() => movies.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  // Also the index for "this user's seen movies", since user_id comes first.
+  (t) => [primaryKey({ columns: [t.userId, t.movieId] })]
+);
+
+// Grows with each stage that adds a kind of change (answers, undo, …).
+export const actionType = pgEnum("action_type", [
+  "seen_list_add",
+  "seen_list_remove",
+]);
+
+// Every change a user makes, keyed by an ID the browser generates. A retried
+// request carries the same ID, so the server recognizes it and changes nothing
+// (see #lib/server/actions.ts). Later stages also use it for undo.
+export const actions = pgTable(
+  "actions",
+  {
+    id: uuid("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: actionType("type").notNull(),
+    movieId: integer("movie_id")
+      .notNull()
+      .references(() => movies.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  // Postgres doesn't index foreign keys by itself; deleting a user needs this
+  // to find their actions.
+  (t) => [index("actions_user_id_idx").on(t.userId)]
+);
+
+export type ActionType = (typeof actionType.enumValues)[number];

@@ -15,3 +15,6 @@ export function createDb(connectionString: string, maxConnections: number) {
 }
 
 export type Db = ReturnType<typeof createDb>["db"];
+
+// What `db.transaction` passes to its callback.
+export type Transaction = Parameters<Parameters<Db["transaction"]>[0]>[0];

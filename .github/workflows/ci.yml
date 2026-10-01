@@ -11,10 +11,26 @@ jobs:
     # Pinned rather than ubuntu-latest (moving to Ubuntu 26 from Oct 2026): Playwright's
     # --with-deps system packages can lag a new Ubuntu release. Revisit at launch (spec stage 10).
     runs-on: ubuntu-24.04
+    # A throwaway database for the tests that need one, on the same major version as Neon.
+    # It starts empty each run; the migrations step below creates the tables.
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        # Steps wait until Postgres accepts connections.
+        options: >-
+          --health-cmd "pg_isready -U ci" --health-interval 2s --health-timeout 5s --health-retries 15
     env:
-      # src/env.ts requires these, and the build checks them. CI never talks to the
-      # database or signs anyone in, so placeholders are enough. Vercel gets the real values.
+      # src/env.ts requires these, and the build checks them. Both database URLs point at the
+      # service above (no pooler here, so they're the same). CI never signs anyone in, so the
+      # secret is a placeholder. Vercel gets the real values.
       DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+      DATABASE_URL_UNPOOLED: postgres://ci:ci@localhost:5432/ci
       BETTER_AUTH_SECRET: ci-placeholder-secret-at-least-32-characters
     steps:
       - uses: actions/checkout@v7
@@ -33,5 +49,7 @@ jobs:
 
       - run: bun run lint
       - run: bun run check
+      # The same committed migrations Vercel applies on deploy.
+      - run: bun run db:migrate
       - run: bun run test:unit --run
       - run: bun run build

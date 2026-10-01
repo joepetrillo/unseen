@@ -1,9 +1,12 @@
 // Neon's URLs (managed by the Vercel integration, so we can't edit them) use
 // `sslmode=require`. pg treats that as verify-full today, but pg v9 switches to
 // libpq's meaning: encrypted but the server's certificate is never checked.
-// Pinning verify-full keeps certificate checks when pg upgrades.
+// Pinning verify-full keeps certificate checks when pg upgrades. Other URLs
+// are left alone, like CI's throwaway local Postgres, which has no TLS.
 export function withVerifiedTls(connectionString: string): string {
   const url = new URL(connectionString);
-  url.searchParams.set("sslmode", "verify-full");
+  if (url.searchParams.get("sslmode") === "require") {
+    url.searchParams.set("sslmode", "verify-full");
+  }
   return url.toString();
 }
