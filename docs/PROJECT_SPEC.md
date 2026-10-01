@@ -237,6 +237,7 @@ Design the schema with the whole spec in mind, but build features in stages. Eac
   - `/dev/movies` is public; remove it or put it behind auth in stage 3.
   - Preview deployments have no database variables and would fail to build; enable Neon preview branching if we start using PRs.
   - Database integration tests (and a database in CI) start in stage 4, the first stage whose checks need them.
+  - Learn how to reset the dev database (Neon branch `vercel-dev`) without pulling Production's data into local testing: empty it (drop the `public` and `drizzle` schemas on dev only), then `db:migrate` + `db:seed`, so dev holds seed data only. Avoid Neon's "reset from parent", which copies Production's rows once real user data exists. Possibly a `db:reset` script that refuses non-dev hosts. Revisit once stage 3 adds auth tables.
   - Vote-count floor (open detail) and the full, resumable catalog sync remain stage 9. Discover currently has no floor; the top 300 are far above any plausible one.
   - Build warns about optional modules (`pg-native`, `cloudflare:sockets`, `bufferutil`); harmless, they're never loaded on Vercel's Node runtime.
 
