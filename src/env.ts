@@ -14,4 +14,21 @@ export const variables = defineEnvVars({
       error: "DATABASE_URL must be a postgres:// URL. Run `vercel env pull`.",
     }),
   },
+  BETTER_AUTH_SECRET: {
+    description:
+      "Signs session cookies. Different per Vercel environment; generate with `openssl rand -base64 32`.",
+    schema: z.string().min(32, {
+      error: "BETTER_AUTH_SECRET must be at least 32 characters.",
+    }),
+  },
+  RESEND_API_KEY: {
+    description:
+      "Sends sign-in codes. Production only; without it codes are printed to the terminal.",
+    schema: z.string().startsWith("re_").optional(),
+  },
+  VERCEL_ENV: {
+    description:
+      "Set by Vercel (production, preview, development). Unset outside Vercel.",
+    schema: z.enum(["production", "preview", "development"]).optional(),
+  },
 });

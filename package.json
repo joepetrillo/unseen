@@ -28,9 +28,12 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@better-auth/drizzle-adapter": "^1.7.7",
     "@vercel/functions": "^3.9.9",
+    "better-auth": "^1.7.7",
     "drizzle-orm": "1.0.0-rc.4",
     "pg": "^8.23.1",
+    "resend": "^6.31.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {

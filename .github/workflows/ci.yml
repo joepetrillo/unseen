@@ -12,9 +12,10 @@ jobs:
     # --with-deps system packages can lag a new Ubuntu release. Revisit at launch (spec stage 10).
     runs-on: ubuntu-24.04
     env:
-      # src/env.ts requires DATABASE_URL, and the build checks it. CI never talks to
-      # the database, so a placeholder is enough. Vercel gets the real value.
+      # src/env.ts requires these, and the build checks them. CI never talks to the
+      # database or signs anyone in, so placeholders are enough. Vercel gets the real values.
       DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+      BETTER_AUTH_SECRET: ci-placeholder-secret-at-least-32-characters
     steps:
       - uses: actions/checkout@v7
       # Bun installs and runs scripts, but Vite and SvelteKit run on Node (their bins use

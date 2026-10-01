@@ -31,7 +31,8 @@ The Svelte MCP server (`svelte`) and the `svelte-code-writer` / `svelte-core-bes
 - No `any`; use `unknown` and narrow. Validate all external input (forms, URL params, TMDB responses, env vars) with Zod 4 and derive types from the schemas (`z.infer`).
 - Use SvelteKit's generated `$types`, Drizzle schema types, and typed `$props`.
 - Svelte 5 runes only. Use `$effect` only when nothing else works.
-- Server-only code (database, secrets, TMDB) lives in `src/lib/server` (imported as `#lib/server/...`). Forms use form actions with `use:enhance`.
+- Server-only code (database, secrets, TMDB) lives in `src/lib/server` (imported as `#lib/server/...`). Forms use form actions with `use:enhance`. Working without JavaScript is not a goal: take it when it's free, never add complexity for it.
+- Exception: sign-in and sign-out use Better Auth's Svelte client (`#lib/auth-client.ts`), not form actions. Better Auth applies its rate limits and origin checks only to HTTP requests through `/api/auth/*`; calling `auth.api.*` from server code skips them.
 - Comments explain _why_ and non-obvious logic, not what the code says: short one- or two-liners above the relevant line (e.g. "Runs once per instance: Node caches modules, so every import shares this pool."). Briefly explain Svelte-specific patterns and platform behavior the same way.
 - Never commit secrets. Keep `.env.example` in sync with `.env`.
 
@@ -42,14 +43,15 @@ The Svelte MCP server (`svelte`) and the `svelte-code-writer` / `svelte-core-bes
 - Schema changes: edit `src/lib/server/db/schema.ts`, then `bun run db:generate` (writes a SQL migration to `drizzle/`, committed) and `bun run db:migrate` (applies it to the dev database). Never `drizzle-kit push`. Production migrates on deploy (`vercel.json` runs `db:migrate` before `build`) while the previous deployment still serves traffic, so every migration must work with the old code too (add, then backfill, then remove in a later deploy).
 - Server code runs on Vercel Fluid compute: one instance serves many requests at once. Never keep per-request or per-user data in module-level variables; use `event.locals`. Shared clients (e.g. the database pool) belong at module level.
 - TMDB is never called during a user session. The deck comes from our own `movies` catalog table, kept updated by a scheduled sync job.
-- Only "seen" is stored per user. "Not seen" lives only in `session_answers`. A missing seen entry means unknown, never not seen.
+- Only "seen" is stored per user. "Not seen" lives only in `watch_session_answers`. A missing seen entry means unknown, never not seen.
 - Matches are derived: every current participant answered Not seen and none has it in their seen list. Never stored; filters and catalog data don't affect existing matches.
-- One active session per group. Closed sessions reject all changes.
+- Naming: a movie-finding session is a **watch session** in code and schema (`watch_sessions`); `sessions` is Better Auth's login-session table. The UI can still say "session".
+- One active watch session per group. Closed watch sessions reject all changes.
 - Deck order: previously matched last, then most confirmations, then TMDB **vote count** (not "popularity"), then movie ID. No cursors or offsets: fetch the top eligible unanswered movies, excluding ones already on screen.
 - Every server operation checks the permission it needs (answering requires an active participation; see spec section 4). The acting user comes from the auth session, never from request data.
-- Every mutation carries a client action ID (logged in `actions`) and runs in one transaction that bumps every affected counter (`sessions.revision` and/or `users.seen_version`).
+- Every mutation carries a client action ID (logged in `actions`) and runs in one transaction that bumps every affected counter (`watch_sessions.revision` and/or `users.seen_version`).
 - All seen-list changes go through one server module.
-- Live updates go through `notifySessionChanged()` (server) and `subscribeToSession()` (client). Polling compares a fingerprint of session revision + participants' seen versions; nothing else may poll or depend on the mechanism.
+- Live updates go through `notifyWatchSessionChanged()` (server) and `subscribeToWatchSession()` (client). Polling compares a fingerprint of watch session revision + participants' seen versions; nothing else may poll or depend on the mechanism.
 
 ## Commands
 

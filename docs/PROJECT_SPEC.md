@@ -121,13 +121,15 @@ Other rules:
 
 ## 3. Data model (starting point, to refine together)
 
-- **users** (+ `seen_version` counter), plus Better Auth's own tables
+**Naming:** the product's "session" (finding a movie together) is a **watch session** in schema and code, because `sessions` is Better Auth's login-session table (decided Sep 30 2026, stage 3). The UI still says "session".
+
+- **users** (+ `seen_version` counter), plus Better Auth's other tables: **sessions** (login sessions), **accounts**, **verifications** (sign-in codes), **rate_limits**. Better Auth's `usePlural` option gives these plural names to match ours (`user` would also be a reserved word in Postgres).
 - **groups**, **group_members** (role: owner/member)
 - **movies** (catalog copy), **movie_genres**
 - **seen** (user, movie, created_at, `last_confirmed_by_action`), unique per user+movie, indexed by user
-- **sessions** (group, host, filters, status active/closed, `revision` counter, last_activity_at); at most one active per group (partial unique index)
-- **session_participants** — one row per participation (ID, session, user, status invited/active/removed, joined_at)
-- **session_answers** (participation, movie, answer), unique per participation+movie; current answers only
+- **watch_sessions** (group, host, filters, status active/closed, `revision` counter, last_activity_at); at most one active per group (partial unique index)
+- **watch_session_participants** — one row per participation (ID, watch session, user, status invited/active/removed, joined_at)
+- **watch_session_answers** (participation, movie, answer), unique per participation+movie; current answers only
 - **actions** — action log for idempotency and undo: action ID (client-generated, primary key), user, participation, type (seen / not_seen / undo / seen_list_remove / …), movie, payload hash, result, undone flag, created_at. Reusing an action ID with a different payload fails.
 - **group_past_matches** (group, movie, recorded_at), written when a session closes
 - The **shortlist is derived**, never stored.
@@ -136,7 +138,7 @@ Other rules:
 
 - **Authorization:** each operation checks the permission it needs. Answering and undo require an active participation; accepting an invite requires a pending invite; viewing a session (including closed ones) requires group membership; seen-list edits only need to be your own list; host actions require being host. The acting user always comes from the login session, never from request data.
 - **Idempotency:** every mutation carries a client-generated **action ID**. Retrying a request that already succeeded returns the stored result and changes nothing.
-- **Transactions:** each mutation (answer, undo, participant change, seen-list edit) runs in one transaction that bumps **every counter it affects**. A Seen answer changes both the session and the user's seen list, so it bumps `sessions.revision` and `users.seen_version`.
+- **Transactions:** each mutation (answer, undo, participant change, seen-list edit) runs in one transaction that bumps **every counter it affects**. A Seen answer changes both the session and the user's seen list, so it bumps `watch_sessions.revision` and `users.seen_version`.
 - **Stale requests:** answers carry their participation ID and movie ID. Requests for an old participation or a closed session are rejected. A late Not seen on an eliminated movie is ignored; a Seen always updates the seen list.
 - **Driver:** one TCP connection pool (see section 5b); transactions work over it directly.
 - **Required tests:** simultaneous answers on the same movie, retry after a successful save, action ID reused with different input, undo conflicts (Seen confirmed again elsewhere), cross-session seen updates, participant removal and rejoin, host leaving, stale poll responses, session closure.
@@ -151,8 +153,8 @@ Other rules:
 - An unchanged fingerprint gets a tiny "no change" response.
 - A user's own answer response returns fresh state; polling only catches other people's changes.
 - **Swappable boundaries:**
-  - Server: `notifySessionChanged(sessionId)`, called on session changes (bumps revision). Seen-list changes bump `seen_version` in the seen-list module.
-  - Client: `subscribeToSession(sessionId, onChange)`, polls and reloads only when the fingerprint changed.
+  - Server: `notifyWatchSessionChanged(watchSessionId)`, called on watch session changes (bumps revision). Seen-list changes bump `seen_version` in the seen-list module.
+  - Client: `subscribeToWatchSession(watchSessionId, onChange)`, polls and reloads only when the fingerprint changed.
   - Switching to a real-time service (Ably/Pusher/PartyKit, or self-hosted WebSockets + Redis pub/sub) means rewriting only these boundaries; the fingerprint logic stays as the safety net.
 
 ## 5b. Database connections
@@ -186,6 +188,7 @@ Server code runs as Node.js functions on Vercel **Fluid compute**: one warm inst
 | Validation | Zod 4 | All external input (TMDB, env vars, later forms and URL params); types come from `z.infer`. Chosen over Valibot/ArkType (Sep 2026) for familiarity and ecosystem: Better Auth already depends on it, Kit's `defineEnvVars` accepts it (Standard Schema) |
 | Auth | Better Auth, **email one-time code only** (email OTP plugin) | Works across devices (read email on laptop, sign in on phone), unlike magic links. No passwords |
 | Auth rate limits | Better Auth rate limiting with **database storage** | In-memory limits don't work across serverless instances |
+| Login email | **Resend** on the live site; locally the code is printed to the terminal | Free tier (3,000/month) covers us. Until a domain is verified, Resend only delivers to the account owner's address: fine for stage 3, a domain is needed before a second person signs up (stage 5). Sign-up is open to any email; rate limits stop abuse |
 | Hosting | Vercel | Near-zero config for SvelteKit |
 | Catalog sync | GitHub Actions scheduled workflow (first seed run locally) | Free, no serverless time limits |
 | Tests | Vitest (unit/integration), Playwright (end-to-end) |  |
@@ -201,7 +204,6 @@ Not needed for v1: WebSockets or real-time services, Redis, job queues (BullMQ),
 - Exact polling intervals and backoff
 - Group invite method (link vs. code) and who can invite
 - How auto-close runs (checked on read vs. a scheduled job)
-- Email provider for login codes (e.g. Resend)
 
 ## 8. Project setup and build order
 

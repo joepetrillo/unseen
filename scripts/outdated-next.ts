@@ -79,8 +79,13 @@ function majorOf(version: string): number {
 
 async function main(): Promise<void> {
   const pkg: unknown = JSON.parse(await readFile("package.json", "utf8"));
-  const deps =
-    isRecord(pkg) && isRecord(pkg.devDependencies) ? pkg.devDependencies : {};
+  // Both lists: drizzle-orm is a runtime dependency, drizzle-kit a dev one.
+  const deps = {
+    ...(isRecord(pkg) && isRecord(pkg.dependencies) ? pkg.dependencies : {}),
+    ...(isRecord(pkg) && isRecord(pkg.devDependencies)
+      ? pkg.devDependencies
+      : {}),
+  };
 
   // Anything pinned to an exact pre-release version, like "1.0.0-rc.4".
   const pinned = Object.entries(deps).filter(
