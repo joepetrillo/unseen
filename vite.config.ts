@@ -16,6 +16,11 @@ export default defineConfig({
       adapter: adapter(),
     }),
   ],
+  // Better Auth only trusts the hosts listed in #lib/server/auth.ts
+  // (localhost:5173 and :4173). If a port is taken, fail at startup instead of
+  // moving to another port where sign-in can't work.
+  server: { strictPort: true },
+  preview: { strictPort: true },
   test: {
     expect: { requireAssertions: true },
     projects: [

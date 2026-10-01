@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
+  import { refreshAll } from "$app/navigation";
   import { resolve } from "$app/paths";
 
   import { authClient } from "#lib/auth-client.ts";
@@ -10,9 +10,9 @@
 
   async function signOut() {
     await authClient.signOut();
-    // Rerun the loads so nothing from the signed-in page survives; the hook
-    // then redirects to sign-in.
-    await goto(resolve("sign-in"), { invalidateAll: true });
+    // The session cookie is gone. Re-running the loads sends a request through
+    // hooks.server.ts, which redirects to sign-in.
+    await refreshAll();
   }
 </script>
 

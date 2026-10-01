@@ -1,40 +1,44 @@
 import { building } from "$app/env";
 import { redirect } from "@sveltejs/kit";
-import type { Handle } from "@sveltejs/kit/hooks";
-import { isAuthPath, svelteKitHandler } from "better-auth/svelte-kit";
+import { type Handle, sequence } from "@sveltejs/kit/hooks";
+import { svelteKitHandler } from "better-auth/svelte-kit";
 
 import { auth } from "#lib/server/auth.ts";
+import {
+  pathAfterSignIn,
+  SIGN_IN_PATH,
+  signInPath,
+} from "#lib/server/sign-in-redirect.ts";
 
-const SIGN_IN_PATH = "/sign-in";
+// Better Auth's own endpoints (/api/auth/*) are answered here, so they skip
+// the session lookup and sign-in guard below. Other requests pass through.
+const betterAuthEndpoints: Handle = ({ event, resolve }) =>
+  svelteKitHandler({ event, resolve, auth, building });
 
-// Runs for every server request: pages, form actions, endpoints, and the data
-// requests behind client-side navigation. Guarding here (not in a layout's
-// `load`) also covers form actions and +server.ts endpoints, which layout
-// loads never run for.
-export const handle: Handle = async ({ event, resolve }) => {
-  // Better Auth's own endpoints (/api/auth/*) answer directly. Skipping the
-  // session lookup there saves a query on every sign-in request.
-  if (building || isAuthPath(event.url.toString(), auth.options)) {
-    return svelteKitHandler({ event, resolve, auth, building });
-  }
-
+// Every other request: pages, form actions, endpoints, and the data requests
+// behind client-side navigation. Guarding here (not in a layout's `load`) also
+// covers form actions and +server.ts endpoints, which layout loads never run for.
+const signInGuard: Handle = async ({ event, resolve }) => {
   // `locals` is per request, so concurrent requests on one instance never see
   // each other's user. Reads the session cookie and looks the session up.
   const result = await auth.api.getSession({ headers: event.request.headers });
   event.locals.user = result?.user ?? null;
   event.locals.session = result?.session ?? null;
 
-  // The sign-in page is the only page open to signed-out visitors. Afterwards
-  // they return to the page they asked for.
-  const onSignIn = event.url.pathname === SIGN_IN_PATH;
-  if (event.locals.user === null && !onSignIn) {
-    const redirectTo = event.url.pathname + event.url.search;
-    const query = new URLSearchParams({ redirectTo }).toString();
-    redirect(303, `${SIGN_IN_PATH}?${query}`);
+  // The sign-in page is the only page open to signed-out visitors, and the
+  // only one closed to signed-in ones. These two redirects are the whole
+  // sign-in routing: after signing in or out, pages just re-run their loads,
+  // and the request lands here.
+  const onSignInPage = event.url.pathname === SIGN_IN_PATH;
+  if (event.locals.user === null && !onSignInPage) {
+    redirect(303, signInPath(event.url));
   }
-  if (event.locals.user !== null && onSignIn) {
-    redirect(303, "/");
+  if (event.locals.user !== null && onSignInPage) {
+    redirect(303, pathAfterSignIn(event.url));
   }
 
   return resolve(event);
 };
+
+// Runs in order: calling `resolve` in one hands the request to the next.
+export const handle = sequence(betterAuthEndpoints, signInGuard);

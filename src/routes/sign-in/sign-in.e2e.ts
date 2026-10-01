@@ -80,7 +80,14 @@ test("signs in with an emailed code and returns to the requested page", async ({
   await page.getByRole("button", { name: "Email me a code" }).click();
   await expect(page.getByText("We sent a 6-digit code")).toBeVisible();
 
-  await page.getByLabel("Code").fill(await readSignInCode());
+  const code = await readSignInCode();
+
+  // Asking again re-sends the same code, so the first email still works.
+  await page.getByRole("button", { name: "send it again" }).click();
+  await expect(page.getByRole("status")).toHaveText(/Sent/);
+  expect(await readSignInCode()).toBe(code);
+
+  await page.getByLabel("Code").fill(code);
   await page.getByRole("button", { name: "Sign in" }).click();
 
   await expect(page).toHaveURL("/dev/movies");

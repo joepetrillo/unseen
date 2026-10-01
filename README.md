@@ -22,6 +22,6 @@ bun run dev
 | --- | --- |
 | `bun run dev` | Dev server |
 | `bun run verify` | Lint + svelte-check + unit tests (what CI runs, minus the build) |
-| `bun run test:e2e` | Playwright end-to-end tests against a production build |
+| `bun run test:e2e` | Playwright end-to-end tests against a production build and the dev database |
 | `bun run fix` | Format with oxfmt and auto-fix lint issues |
 | `bun run outdated:next` | Check pinned pre-release packages (Kit, adapter, Drizzle) for updates |

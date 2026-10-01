@@ -13,7 +13,7 @@ SvelteKit app that finds movies nobody in a group has seen. Full spec, scope, an
 
 Most tutorials and training data use SvelteKit 2 and Drizzle 0.x. Use the new APIs:
 
-- **SvelteKit 3:** import from `#lib/...` with file extensions (`#lib/server/db/index.ts`), not `$lib`. Use `$app/env`, not `$app/environment`; `$app/state`, not `$app/stores`. Declare the app's env vars in `src/env.ts` (`defineEnvVars`) and import them from `$app/env/private` or `$app/env/public`. Scripts in `scripts/` run outside Kit, so they validate `process.env` themselves with Zod. Docs: https://next.svelte.dev/docs/kit. No remote functions (still experimental).
+- **SvelteKit 3:** import from `#lib/...` with file extensions (`#lib/server/db/index.ts`), not `$lib`. Use `$app/env`, not `$app/environment`; `$app/state`, not `$app/stores`; `refreshAll`, not `invalidateAll`. Declare the app's env vars in `src/env.ts` (`defineEnvVars`) and import them from `$app/env/private` or `$app/env/public`. Scripts in `scripts/` run outside Kit, so they validate `process.env` themselves with Zod. Docs: https://next.svelte.dev/docs/kit. No remote functions (still experimental).
 - **Drizzle v1:** `drizzle({ client, relations })`, relations via `defineRelations`, relational queries v2. Docs: https://orm.drizzle.team (v1 pages). Better Auth uses `@better-auth/drizzle-adapter/relations-v2`.
 - Kit, the Vercel adapter, drizzle-orm, and drizzle-kit are pinned to exact versions. `bun outdated` can't see their updates; run `bun run outdated:next` at the start of each stage. Upgrade deliberately, in pairs (kit + adapter-vercel, drizzle-orm + drizzle-kit), then `bun run verify`.
 

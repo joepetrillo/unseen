@@ -14,9 +14,16 @@ import {
   WINDOW_MINUTES,
 } from "#lib/server/sign-in-code-limit.ts";
 
-// Only the field our hook needs; Better Auth validates the full body itself.
-const sendCodeBodySchema = z.object({
-  email: z.email().transform((email) => email.toLowerCase()),
+// The part of a send-code request our per-email limit needs. Normalized the
+// way Better Auth does it (lowercase, then validate), so the limit counts
+// exactly the address the code is sent to. Better Auth validates the rest.
+const signInCodeRequestSchema = z.object({
+  email: z
+    .string()
+    .transform((email) => email.toLowerCase())
+    .pipe(z.email()),
+  // Only sign-in codes are emailed (see `sendVerificationOTP` below).
+  type: z.literal("sign-in"),
 });
 
 // Created once per instance (module level), like the database pool. It holds
@@ -55,8 +62,9 @@ export const auth = betterAuth({
     // never replaces the pending code.
     before: createAuthMiddleware(async (ctx) => {
       if (ctx.path !== "/email-otp/send-verification-otp") return;
-      const body = sendCodeBodySchema.safeParse(ctx.body);
-      // Invalid bodies are rejected by the endpoint's own validation.
+      const body = signInCodeRequestSchema.safeParse(ctx.body);
+      // Not a valid sign-in code request: nothing will be emailed, and the
+      // endpoint's own validation rejects anything malformed.
       if (!body.success) return;
       if (!(await consumeSignInCodeRequest(db, body.data.email))) {
         throw new APIError("TOO_MANY_REQUESTS", {
@@ -76,8 +84,14 @@ export const auth = betterAuth({
   ],
   plugins: [
     emailOTP({
+      // Asking again re-sends the pending code (with a fresh 5 minutes) instead
+      // of replacing it, so whichever email arrives first has a working code.
+      resendStrategy: "reuse",
+      // Better Auth runs this without passing errors back: a failed send is
+      // logged, and the request still reports success.
       async sendVerificationOTP({ email, otp, type }) {
-        // Other types can only come from the endpoints disabled above.
+        // Codes are only for signing in. The same endpoint also issues
+        // email-verification and password-reset codes, which we never send.
         if (type !== "sign-in") return;
         await sendSignInCode(email, otp);
       },
