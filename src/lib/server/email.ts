@@ -1,8 +1,8 @@
 import { RESEND_API_KEY, VERCEL_ENV } from "$app/env/private";
 import { Resend } from "resend";
 
-// Resend's shared sender. Until we verify our own domain (stage 10), it only
-// delivers to the Resend account owner's address.
+// Resend's shared sender. Until we verify our own domain (needed before a
+// second person signs up), it only delivers to the Resend account owner.
 const FROM = "Unseen <onboarding@resend.dev>";
 
 // Created once per instance, like the database pool. Undefined locally, where

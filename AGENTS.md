@@ -32,7 +32,7 @@ The Svelte MCP server (`svelte`) and the `svelte-code-writer` / `svelte-core-bes
 - Use SvelteKit's generated `$types`, Drizzle schema types, and typed `$props`.
 - Svelte 5 runes only. Use `$effect` only when nothing else works.
 - Server-only code (database, secrets, TMDB) lives in `src/lib/server` (imported as `#lib/server/...`). Forms use form actions with `use:enhance`. Working without JavaScript is not a goal: take it when it's free, never add complexity for it.
-- Exception: sign-in and sign-out use Better Auth's Svelte client (`#lib/auth-client.ts`), not form actions. Better Auth applies its rate limits and origin checks only to HTTP requests through `/api/auth/*`; calling `auth.api.*` from server code skips them.
+- Exception: sign-in and sign-out use Better Auth's browser client (`#lib/auth-client.ts`), not form actions. Better Auth applies its rate limits and origin checks only to HTTP requests through `/api/auth/*`; calling `auth.api.*` from server code skips them.
 - Comments explain _why_ and non-obvious logic, not what the code says: short one- or two-liners above the relevant line (e.g. "Runs once per instance: Node caches modules, so every import shares this pool."). Briefly explain Svelte-specific patterns and platform behavior the same way.
 - Never commit secrets. Keep `.env.example` in sync with `.env`.
 
