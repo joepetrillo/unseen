@@ -164,3 +164,14 @@ export const rateLimits = pgTable("rate_limits", {
 });
 
 export type User = typeof users.$inferSelect;
+
+// Our own per-address limit on sign-in code emails (see
+// #lib/server/sign-in-code-limit.ts). Better Auth's rate limits are per IP,
+// and people in one room share an IP. One row per address ever used.
+export const signInCodeLimits = pgTable("sign_in_code_limits", {
+  email: text("email").primaryKey(),
+  windowStartedAt: timestamp("window_started_at", {
+    withTimezone: true,
+  }).notNull(),
+  count: integer("count").notNull(),
+});

@@ -6,7 +6,12 @@ import { eq, like } from "drizzle-orm";
 import { z } from "zod";
 
 import { createDb } from "#lib/server/db/client.ts";
-import { users, verifications } from "#lib/server/db/schema.ts";
+import {
+  signInCodeLimits,
+  users,
+  verifications,
+} from "#lib/server/db/schema.ts";
+import { MAX_CODES_PER_EMAIL } from "#lib/server/sign-in-code-limit.ts";
 
 // Playwright runs under Node, which doesn't load .env.local the way Vite and
 // Bun do. These are the Development values, so the test uses the dev database.
@@ -18,12 +23,14 @@ const { DATABASE_URL } = z
   .parse(process.env);
 const { pool, db } = createDb(DATABASE_URL, 1);
 
-// A fresh address per run, on a reserved domain that can't receive mail.
-const email = `e2e-${crypto.randomUUID()}@example.test`;
+// Fresh addresses per run, on a reserved domain that can't receive mail.
+const runId = `e2e-${crypto.randomUUID()}`;
+const email = `${runId}@example.test`;
+const limitedEmail = `${runId}-limited@example.test`;
 
 // Locally there's no proxy setting the client IP, so every request would share
-// one rate-limit bucket (3 codes per 10 minutes) across runs. A random IP per
-// run gives this run its own bucket.
+// one per-IP rate-limit bucket (10 codes per 10 minutes) across runs. A random
+// IP per run gives this run its own bucket.
 test.use({
   extraHTTPHeaders: {
     "x-forwarded-for": `10.${String(Math.floor(Math.random() * 256))}.0.1`,
@@ -31,11 +38,15 @@ test.use({
 });
 
 test.afterAll(async () => {
-  // Deleting the user cascades to its sessions. Codes aren't linked to users.
+  // Deleting the user cascades to its sessions. Codes and limits aren't
+  // linked to users.
   await db.delete(users).where(eq(users.email, email));
   await db
     .delete(verifications)
-    .where(like(verifications.identifier, `%${email}`));
+    .where(like(verifications.identifier, `%${runId}%`));
+  await db
+    .delete(signInCodeLimits)
+    .where(like(signInCodeLimits.email, `${runId}%`));
   await pool.end();
 });
 
@@ -81,4 +92,22 @@ test("signs in with an emailed code and returns to the requested page", async ({
   await expect(page).toHaveURL("/sign-in");
   await page.goto("/dev/movies");
   await expect(page).toHaveURL(/\/sign-in\?/);
+});
+
+test("refuses more codes for one email within the limit window", async ({
+  page,
+}) => {
+  await page.goto("/sign-in");
+  await page.getByLabel("Email").fill(limitedEmail);
+  const sendCode = page.getByRole("button", { name: "Email me a code" });
+
+  for (let i = 0; i < MAX_CODES_PER_EMAIL; i++) {
+    await sendCode.click();
+    await expect(page.getByText("We sent a 6-digit code")).toBeVisible();
+    // Goes back to the email step; the address stays filled in.
+    await page.getByRole("button", { name: "Use a different email" }).click();
+  }
+
+  await sendCode.click();
+  await expect(page.getByRole("alert")).toHaveText(/Too many attempts/);
 });

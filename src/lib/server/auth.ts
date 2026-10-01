@@ -2,11 +2,22 @@ import { BETTER_AUTH_SECRET } from "$app/env/private";
 import { getRequestEvent } from "$app/server";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import { betterAuth } from "better-auth";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins";
 import { sveltekitCookies } from "better-auth/svelte-kit";
+import { z } from "zod";
 
 import { db } from "#lib/server/db/index.ts";
 import { sendSignInCode } from "#lib/server/email.ts";
+import {
+  consumeSignInCodeRequest,
+  WINDOW_MINUTES,
+} from "#lib/server/sign-in-code-limit.ts";
+
+// Only the field our hook needs; Better Auth validates the full body itself.
+const sendCodeBodySchema = z.object({
+  email: z.email().transform((email) => email.toLowerCase()),
+});
 
 // Created once per instance (module level), like the database pool. It holds
 // configuration only; per-request data arrives through each call's headers.
@@ -27,11 +38,32 @@ export const auth = betterAuth({
   rateLimit: {
     // In memory, every serverless instance would keep its own counts.
     storage: "database",
+    // Per IP, and a room of people on one Wi-Fi shares an IP, so these leave
+    // room for a group signing in together. The strict limit is per email
+    // address (`hooks` below).
     customRules: {
-      // Each send is an email. The default (3 per minute per IP) would allow
-      // thousands a day; Resend's free tier is 100.
-      "/email-otp/send-verification-otp": { window: 600, max: 3 },
+      // Each send is an email; also caps how fast one IP can use up Resend's
+      // free tier (100 a day).
+      "/email-otp/send-verification-otp": { window: 600, max: 10 },
+      // Default is 3 per 10 seconds. Guessing is already stopped by each
+      // code's 3-attempt limit, so this only needs to stop hammering.
+      "/sign-in/email-otp": { window: 60, max: 10 },
     },
+  },
+  hooks: {
+    // Runs after the IP limit but before the endpoint, so a refused request
+    // never replaces the pending code.
+    before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path !== "/email-otp/send-verification-otp") return;
+      const body = sendCodeBodySchema.safeParse(ctx.body);
+      // Invalid bodies are rejected by the endpoint's own validation.
+      if (!body.success) return;
+      if (!(await consumeSignInCodeRequest(db, body.data.email))) {
+        throw new APIError("TOO_MANY_REQUESTS", {
+          message: `Too many codes for this email. Try again in ${String(WINDOW_MINUTES)} minutes.`,
+        });
+      }
+    }),
   },
   // Sign-in by code is the only method. Close the plugin's password and
   // email-change endpoints so they can't be used to attach other credentials.
