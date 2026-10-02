@@ -14,6 +14,12 @@ describe("signInPath", () => {
   it("leaves out the home page", () => {
     expect(signInPath(new URL(`${ORIGIN}/`))).toBe("/sign-in");
   });
+
+  it("keeps page filters but drops a POST's named action", () => {
+    expect(
+      signInPath(new URL(`${ORIGIN}/seen?scope=all&title=Inception&/add`))
+    ).toBe("/sign-in?redirectTo=%2Fseen%3Fscope%3Dall%26title%3DInception");
+  });
 });
 
 describe("pathAfterSignIn", () => {

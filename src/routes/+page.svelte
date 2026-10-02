@@ -7,14 +7,36 @@
   import type { PageProps } from "./$types";
 
   let { data }: PageProps = $props();
+  let signingOut = $state(false);
+  let errorMessage = $state<string | null>(null);
 
   async function signOut() {
-    await authClient.signOut();
-    // The session cookie is gone. Re-running the loads sends a request through
-    // hooks.server.ts, which redirects to sign-in.
-    await refreshAll();
+    if (signingOut) return;
+    signingOut = true;
+    errorMessage = null;
+    try {
+      const { error } = await authClient.signOut();
+      if (error !== null) {
+        errorMessage = "Couldn't sign out. Try again.";
+        return;
+      }
+      // The cookie is gone; the hook redirects when page data refreshes.
+      try {
+        await refreshAll();
+      } catch {
+        errorMessage =
+          "Signed out, but couldn't refresh the page. Reload to continue.";
+      }
+    } catch {
+      errorMessage =
+        "Couldn't reach Unseen. Check your connection and try again.";
+    } finally {
+      signingOut = false;
+    }
   }
 </script>
+
+<svelte:head><title>Unseen</title></svelte:head>
 
 <main class="mx-auto max-w-xl p-4">
   <h1 class="text-2xl font-bold">Unseen</h1>
@@ -22,8 +44,17 @@
   {#if data.user}
     <p class="mt-4 text-sm">
       Signed in as <strong>{data.user.email}</strong>.
-      <button class="underline" onclick={signOut}>Sign out</button>
+      <button
+        class="underline disabled:opacity-50"
+        onclick={signOut}
+        disabled={signingOut}
+      >
+        {signingOut ? "Signing out…" : "Sign out"}
+      </button>
     </p>
+  {/if}
+  {#if errorMessage}
+    <p class="mt-4 text-sm text-red-700" role="alert">{errorMessage}</p>
   {/if}
   <p class="mt-4 text-sm">
     <a class="underline" href={resolve("seen")}>Your seen movies</a>
