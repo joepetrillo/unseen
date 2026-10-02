@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "imports": {
-    "#lib": "./src/lib/index.js",
     "#lib/*": "./src/lib/*"
   },
   "scripts": {
@@ -24,6 +23,7 @@
     "outdated:next": "bun scripts/outdated-next.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:migrate:test": "bun scripts/migrate-test-db.ts",
     "db:seed": "bun scripts/seed-movies.ts",
     "db:studio": "drizzle-kit studio"
   },
