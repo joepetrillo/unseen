@@ -1,6 +1,6 @@
 # Application audit
 
-Audit date: 2026-10-02. Baseline: `ed96a72caaddf79cca3505d5a9ddd78a191516a8`. Work is isolated in `audit/correctness-security-2026-10-02`; no changes are pushed or deployed, and no live service is mutated.
+Audit date: 2026-10-02. Baseline: `ed96a72caaddf79cca3505d5a9ddd78a191516a8`. Work is isolated in `audit/correctness-security-2026-10-02`. The user subsequently authorized publishing this branch for review; main remains unchanged, with no deployment or live service mutation.
 
 The original version table and checks below describe the October 2 audit. The [stable-framework follow-up](#stable-framework-follow-up-2026-10-03) records the subsequently requested upgrade to SvelteKit 3.0.0 and Vercel adapter 7.0.0.
 
@@ -133,7 +133,7 @@ Coverage is behavioral: real local PostgreSQL transactions/constraints and concu
 4. **Retention:** Better Auth 1.7.7 prunes expired database rate-limit rows; the old spec claim that these never prune was inaccurate. App-specific `sign_in_code_limits` retains one address per requester, and action logs grow by design for retry/undo semantics. Decide retention/pruning alongside stage 9 jobs, without removing required action history. No live cleanup was run.
 5. **Product/runtime gaps:** signup stays open; no new allowlist, invite model, groups, watch sessions, jobs, or webhooks were invented. Bun remains unpinned in CI. Full catalog query performance, provider field compatibility for a new import, non-Chromium/screen-reader testing, and hosted Vercel/Neon/Resend behavior remain unverified. The schema/migration files were reviewed and applied locally, not compared to the deployed database. Stage 4's live-site check remains pending.
 
-No schema migration, production data change, deployment, real email, or push is part of this audit. Review the isolated branch, perform the OTP/email/Preview preparation where applicable, then authorize the normal migration/build/deployment workflow separately. The test migration command is for disposable databases only.
+No new schema migration, production data change, deployment, or real email is part of this audit. The original audit was local; the user subsequently authorized publishing only the audit branch for review. Perform the OTP/email/Preview preparation where applicable, then authorize the normal migration/build/deployment workflow separately. The test migration command is for disposable databases only.
 
 ## Stable-framework follow-up (2026-10-03)
 
@@ -148,3 +148,13 @@ The pre-upgrade type check passed with zero errors/warnings. Post-upgrade frozen
 A separate production-mode `bun run build` also passed with the disposable database URL and a dummy Resend key, without delivery calls. The generated stable adapter function reports `nodejs24.x`, `launcherType: Nodejs`, and `experimentalResponseStreaming: true`, matching the original runtime. This validates build output, not hosted Vercel execution. The final documentation formatting and whitespace checks passed; only the framework pair, lockfile, version guidance, and update-checker comment changed.
 
 The original rollout notes still apply, including encrypted OTP cutover and the pending stage 4 live-site check. This follow-up does not deploy, migrate a hosted database, send real email, or complete a product stage.
+
+## Finalization and review publication (2026-10-03)
+
+Confirmed findings F1–F9 are implemented; the remaining upstream driver question and separately authorized hosted checks remain explicit above. Added `docs/AUDIT_REVIEW_PROMPT.md` as an independent review handoff rather than prescribing a second implementation of the fixes.
+
+This repository's Vercel Git integration normally deploys branch pushes, and its build command applies migrations. Added the supported, branch-specific `git.deploymentEnabled` setting to disable auto-deployment of `audit/correctness-security-2026-10-02` before publishing it. Other branches keep their existing behavior. Reviewed the [official configuration docs](https://vercel.com/docs/project-configuration/git-configuration#gitdeploymentenabled) and [schema](https://openapi.vercel.sh/vercel.json); this changes repository configuration only, not live Vercel settings.
+
+Finalization reran frozen installation, the four migrations on fresh disposable PostgreSQL 18.6, format/lint, type checks (zero errors/warnings), all 90 regression tests, all 15 production-build Chromium journeys, and a separate production-mode Node 24 build with dummy email settings. All passed; `bun audit --json` again returned `{}`. No runtime application code or migration history changed during finalization. GitHub CI runs on main and pull requests, so publishing a branch alone does not constitute a remote CI run.
+
+Strict metavalidation of Vercel's entire published JSON schema failed on its unrelated queue-trigger definitions/draft declaration. Each of the three fields actually used (`$schema`, `git`, `buildCommand`) passed validation against its official property schema; exact branch-only disablement and the unchanged build command were also checked. No schema or application checks were weakened to hide a configuration error.
