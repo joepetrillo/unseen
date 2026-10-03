@@ -2,7 +2,7 @@
 
 Finds movies nobody in a group has seen. The current application has email-code sign-in, a movie catalog, and a personal seen list with search, filters, and pagination. Groups and watch sessions are later stages in the [product spec](docs/PROJECT_SPEC.md); stage 4 still needs its live-site check.
 
-SvelteKit 3.0.0-next.31, Svelte 5, TypeScript, Drizzle 1.0.0-rc.4, Neon Postgres through `pg`, Better Auth, Resend, and Vercel's Node adapter. The [audit](docs/AUDIT.md) records exact resolved versions, source references, verification, and rollout notes. [AGENTS.md](AGENTS.md) holds contributor conventions.
+SvelteKit 3.0.0 stable, Svelte 5, TypeScript, Drizzle 1.0.0-rc.4, Neon Postgres through `pg`, Better Auth, Resend, and Vercel's Node adapter 7.0.0. The [audit](docs/AUDIT.md) records exact resolved versions, source references, verification, and rollout notes. [AGENTS.md](AGENTS.md) holds contributor conventions.
 
 ## Development setup
 
@@ -88,6 +88,7 @@ Svelte's `$state` and `$derived` update component state and computed values with
 | `bun run db:migrate` | Applies migrations to `.env.local`'s Development database, or deploy-provided settings |
 | `bun run db:seed` | Calls TMDB and writes/upserts the small Development catalog; requires its token; rejects hosted Preview/Production |
 | `bun run db:studio` | Opens a database editor for the configured database |
-| `bun run outdated:next` | Checks pinned Kit/adapter/Drizzle prerelease versions without upgrading them |
+| `bun outdated` | Checks stable package updates without upgrading them |
+| `bun run outdated:next` | Checks remaining pinned prereleases (Drizzle ORM/Kit) without upgrading them |
 
 Vercel's configured build runs `db:migrate` before `build`, so a deployment writes to its selected database. New migrations must remain compatible with the preceding deployment. This audit prepares changes only; it does not deploy or complete the pending live-site checks.

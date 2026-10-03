@@ -182,7 +182,7 @@ Server code runs as Node.js functions on Vercel **Fluid compute**: one warm inst
 
 | Area | Choice | Why |
 | --- | --- | --- |
-| Framework | Svelte 5 + SvelteKit 3 (pre-release, pinned) | Learning goal. Adopted before stable (Sep 2026) because migrating an empty project is nearly free; stable was expected soon with no further breaking changes |
+| Framework | Svelte 5 + SvelteKit 3.0.0 (stable, pinned), Vercel adapter 7.0.0 | Learning goal. Adopted before stable (Sep 2026); upgraded the framework/adapter pair to stable on the isolated audit branch (Oct 2026). Existing Kit 3 APIs retained |
 | Language | TypeScript (strict) |  |
 | Styling | Tailwind CSS |  |
 | Components | shadcn-svelte (built on Bits UI), Bits UI directly for custom pieces | Headless, accessible, owned code |
@@ -233,7 +233,7 @@ Design the schema with the whole spec in mind, but build features in stages. Eac
 
 <!-- Update at the end of each stage: stage number, status, date, follow-ups. -->
 
-- **Stage 1 — done (2026-09-30).** Scaffold, strict lint/type-check setup, oxfmt, CI workflow, `AGENTS.md`, SvelteKit 3 (pre-release, now `next.31`) + Drizzle v1 (RC), Vitest 5, `outdated:next` script, database connection plan (section 5b), Svelte AI tools (remote Svelte MCP in `.cursor/mcp.json` + `.mcp.json`, skills in `.agents/skills`). Node pinned to `24.x` via `engines` (read by CI's `setup-node` and by Vercel). Repo: [joepetrillo/unseen](https://github.com/joepetrillo/unseen) (public). Vercel project `joes-projects-dab9d62e/unseen`, Git-connected (push to `main` deploys production); live at https://unseen-sooty-ten.vercel.app. Follow-ups for stage 2:
+- **Stage 1 — done (2026-09-30).** Scaffold, strict lint/type-check setup, oxfmt, CI workflow, `AGENTS.md`, SvelteKit 3 (pre-release at scaffold; stable upgrade recorded below) + Drizzle v1 (RC), Vitest 5, `outdated:next` script, database connection plan (section 5b), Svelte AI tools (remote Svelte MCP in `.cursor/mcp.json` + `.mcp.json`, skills in `.agents/skills`). Node pinned to `24.x` via `engines` (read by CI's `setup-node` and by Vercel). Repo: [joepetrillo/unseen](https://github.com/joepetrillo/unseen) (public). Vercel project `joes-projects-dab9d62e/unseen`, Git-connected (push to `main` deploys production); live at https://unseen-sooty-ten.vercel.app. Follow-ups for stage 2:
   - Vercel's `DATABASE_URL` (Production + Preview) is a **placeholder**: the build validates `src/env.ts`, but nothing queries the database yet. Replace it with the Neon pooled string and add `DIRECT_URL`.
   - `drizzle.config.ts` still reads `DATABASE_URL`; switch it to `DIRECT_URL` (section 5b).
   - `src/env.ts` validates with a hand-written function; switch to a schema once a validation library is added.
@@ -270,6 +270,8 @@ Design the schema with the whole spec in mind, but build features in stages. Eac
   - The dev database reset follow-up (stage 2) now also covers `seen_movies` and `actions`. Tests leave no rows behind.
 
 - **Audit — prepared on an isolated branch (2026-10-02), not deployed.** Inspected the current application and retained its route/form-action, pooled TCP database, and idempotent mutation design. Added disposable test configuration/migrations, encrypted OTP storage and a restricted auth surface, hosted email safeguards, database connection recovery/timeout handling, stale-action URL protection, deliberate missing-movie responses, sign-in/sign-out failure recovery and focus management, and validated/transactional catalog import coverage. CI now exercises browser journeys. Exact findings, versions, checks, limitations, and separate rollout steps are in `docs/AUDIT.md`. This does not complete stage 4's live-site check or implement later stages.
+
+- **Framework stable upgrade — prepared on the isolated audit branch (2026-10-03), not deployed.** SvelteKit 3.0.0 and Vercel adapter 7.0.0 replace their prereleases; the existing Kit 3 application APIs need no migration. Other resolved dependency versions remain unchanged, including Drizzle v1 RC. Frozen install, format/lint, type checks, 90 regression tests, 15 Chromium journeys, and the production-mode Vercel Node 24 build passed. Stable documentation and remaining rollout gaps are recorded in `docs/AUDIT.md`. Stage 4's live-site check remains pending.
 
 ## 9. Linting and formatting decision
 

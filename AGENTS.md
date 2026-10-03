@@ -10,21 +10,21 @@ SvelteKit app that finds movies nobody in a group has seen. Full spec, scope, an
 - Be concise. No filler.
 - Svelte 5, SvelteKit, Better Auth, and Drizzle change fast: check current docs rather than relying on memory.
 
-## Pre-release versions (easy to get wrong from memory)
+## Version-sensitive APIs (easy to get wrong from memory)
 
-Most tutorials and training data use SvelteKit 2 and Drizzle 0.x. Use the new APIs:
+SvelteKit 3 is stable; Drizzle v1 is still an RC. Most older tutorials use SvelteKit 2 and Drizzle 0.x. Use the installed major's APIs:
 
-- **SvelteKit 3:** import from `#lib/...` with file extensions (`#lib/server/db/index.ts`), not `$lib`. Use `$app/env`, not `$app/environment`; `$app/state`, not `$app/stores`; `refreshAll`, not `invalidateAll`. Declare the app's env vars in `src/env.ts` (`defineEnvVars`) and import them from `$app/env/private` or `$app/env/public`. Scripts in `scripts/` run outside Kit, so they validate `process.env` themselves with Zod. Docs: https://next.svelte.dev/docs/kit. No remote functions (still experimental).
+- **SvelteKit 3:** import from `#lib/...` with file extensions (`#lib/server/db/index.ts`), not `$lib`. Use `$app/env`, not `$app/environment`; `$app/state`, not `$app/stores`; `refreshAll`, not `invalidateAll`. Declare the app's env vars in `src/env.ts` (`defineEnvVars`) and import them from `$app/env/private` or `$app/env/public`. Scripts in `scripts/` run outside Kit, so they validate `process.env` themselves with Zod. Docs: https://svelte.dev/docs/kit. No remote functions (still experimental).
 - **Kit 3 form actions:** a relative action (`action="?/add"`) replaces the page's query string. Keep search/filter params and strip existing `/action` keys before appending the new one (Kit chooses the first). See `src/routes/seen/SeenButton.svelte` and `sign-in-redirect.ts`. Enhanced redirects are JSON action envelopes; ordinary forms must request HTML to receive an HTTP redirect.
 - **Drizzle v1:** `drizzle({ client, relations })`, relations via `defineRelations`, relational queries v2. Docs: https://orm.drizzle.team (v1 pages). Better Auth uses `@better-auth/drizzle-adapter/relations-v2`.
-- Kit, the Vercel adapter, drizzle-orm, and drizzle-kit are pinned to exact versions. `bun outdated` can't see their updates; run `bun run outdated:next` at the start of each stage. Upgrade deliberately, in pairs (kit + adapter-vercel, drizzle-orm + drizzle-kit), then `bun run verify`.
+- Kit, the Vercel adapter, drizzle-orm, and drizzle-kit are pinned to exact versions. At the start of each stage, use `bun outdated` for stable packages and `bun run outdated:next` for the remaining Drizzle prereleases. Upgrade deliberately, in pairs (kit + adapter-vercel, drizzle-orm + drizzle-kit), then `bun run verify` and relevant browser tests.
 
 ## Svelte AI tools
 
 The Svelte MCP server (`svelte`) and the `svelte-code-writer` / `svelte-core-bestpractices` skills are installed.
 
 - **Svelte 5:** look things up with `get-documentation` (call `list-sections` only when you don't know the section path). Load `svelte-core-bestpractices` before writing components.
-- **SvelteKit:** the MCP serves SvelteKit 2 docs (`$lib`, `$app/environment`, `svelte.config.js`). Fetch the SvelteKit 3 page instead: `https://next.svelte.dev/docs/kit/<slug>/llms.txt`, where `<slug>` is the MCP path without `kit/` (e.g. `form-actions`, `$app-env`). What changed from 2: `https://next.svelte.dev/docs/kit/migrating-to-sveltekit-3/llms.txt`. When sources disagree, the pre-release rules above win.
+- **SvelteKit:** check the MCP documentation's major version before using it. If it describes Kit 2 (`$lib`, `$app/environment`, `svelte.config.js`), fetch the Kit 3 page instead: `https://svelte.dev/docs/kit/<slug>/llms.txt`, where `<slug>` is the MCP path without `kit/` (e.g. `form-actions`, `$app-env`). Migration guide: `https://svelte.dev/docs/kit/migrating-to-sveltekit-3/llms.txt`. Resolve disagreements against installed types and matching tagged source.
 - **Validate:** after creating or editing any `.svelte`, `.svelte.ts`, or `.svelte.js` file, run `svelte-autofixer` on it and repeat until it returns no issues or suggestions. If the MCP isn't connected, use the CLI from `svelte-code-writer` (`npx @sveltejs/mcp svelte-autofixer <path>`).
 - **`playground-link`:** only for code not written to project files, and only after asking me.
 

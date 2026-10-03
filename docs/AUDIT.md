@@ -2,6 +2,8 @@
 
 Audit date: 2026-10-02. Baseline: `ed96a72caaddf79cca3505d5a9ddd78a191516a8`. Work is isolated in `audit/correctness-security-2026-10-02`; no changes are pushed or deployed, and no live service is mutated.
 
+The original version table and checks below describe the October 2 audit. The [stable-framework follow-up](#stable-framework-follow-up-2026-10-03) records the subsequently requested upgrade to SvelteKit 3.0.0 and Vercel adapter 7.0.0.
+
 ## Scope and architecture
 
 Inspected every handwritten module under `src/` and `scripts/`, all routes, tests, environment declarations, CI/build/lint/editor configuration, the README, contributor instructions, product spec, and all four SQL migrations. Generated migration snapshots, the lockfile, installed dependencies, assets, and bundled skills were reviewed at their configuration/integration boundaries. Groups, watch sessions, polling, scheduled catalog sync, and webhooks do not exist yet and were not implemented as part of this audit. Stage 4 still requires its separate live-site check.
@@ -49,7 +51,7 @@ Severity describes consequence, not preferred style. Every correction below is i
 
 ## Exact versions and runtime
 
-Resolved from the frozen `bun.lock` install and installed manifests, not package ranges. No dependency versions or lockfile entries changed.
+Resolved from the frozen `bun.lock` install and installed manifests, not package ranges. No dependency versions or lockfile entries changed during the original audit; the subsequent framework upgrade is recorded below.
 
 | Packages/runtime | Resolved version |
 | --- | --- |
@@ -132,3 +134,17 @@ Coverage is behavioral: real local PostgreSQL transactions/constraints and concu
 5. **Product/runtime gaps:** signup stays open; no new allowlist, invite model, groups, watch sessions, jobs, or webhooks were invented. Bun remains unpinned in CI. Full catalog query performance, provider field compatibility for a new import, non-Chromium/screen-reader testing, and hosted Vercel/Neon/Resend behavior remain unverified. The schema/migration files were reviewed and applied locally, not compared to the deployed database. Stage 4's live-site check remains pending.
 
 No schema migration, production data change, deployment, real email, or push is part of this audit. Review the isolated branch, perform the OTP/email/Preview preparation where applicable, then authorize the normal migration/build/deployment workflow separately. The test migration command is for disposable databases only.
+
+## Stable-framework follow-up (2026-10-03)
+
+Upgraded the framework pair on the same isolated branch: `@sveltejs/kit` from `3.0.0-next.31` to exact `3.0.0`, and `@sveltejs/adapter-vercel` from `7.0.0-next.9` to exact `7.0.0`. No other resolved package versions changed. Bun also normalized the lockfile's two existing Better Auth root range declarations to match `package.json`; both resolved auth packages remain 1.7.7. Drizzle stays at 1.0.0-rc.4.
+
+Reviewed the [stable announcement](https://svelte.dev/blog/sveltekit-3-is-here), [stable migration guide](https://svelte.dev/docs/kit/migrating-to-sveltekit-3/llms.txt), and matching [Kit changelog](https://github.com/sveltejs/kit/blob/%40sveltejs%2Fkit%403.0.0/packages/kit/CHANGELOG.md) / [adapter changelog](https://github.com/sveltejs/kit/blob/%40sveltejs%2Fadapter-vercel%407.0.0/packages/adapter-vercel/CHANGELOG.md). Compared the published prerelease/stable packages at the config, environment, form-action, cookie, client navigation, and public-type boundaries. Stable requirements are already met by Node 24.19.0, TypeScript 6.0.3, Svelte 5.57.1, Vite 8.3.1, and vite-plugin-svelte 7.3.1. The adapter's executable files are unchanged from next.9; its package version changed.
+
+The application already uses Kit 3's Vite configuration, `#lib` imports, declared environment variables, and form/navigation APIs, so no application-code migration was needed. Remote functions and async Svelte remain disabled. README, contributor instructions, and the spec now distinguish stable Kit from RC Drizzle, link to stable docs, and use `bun outdated` for stable packages while retaining `outdated:next` for remaining prereleases.
+
+The pre-upgrade type check passed with zero errors/warnings. Post-upgrade frozen installation, format/lint, and type checks passed; `bun run verify` passed all 90 tests in 15 files. `bun run test:e2e` rebuilt the app and passed all 15 Chromium journeys. The same four committed migrations were applied to a new disposable PostgreSQL 18.6 database on local port 55433; providers stayed mocked or terminal-only. `bun audit --json` returned `{}`. The existing optional-dependency and Vitest plugin-hook warnings remain; Playwright additionally reported inherited `NO_COLOR`/`FORCE_COLOR` precedence, without affecting results.
+
+A separate production-mode `bun run build` also passed with the disposable database URL and a dummy Resend key, without delivery calls. The generated stable adapter function reports `nodejs24.x`, `launcherType: Nodejs`, and `experimentalResponseStreaming: true`, matching the original runtime. This validates build output, not hosted Vercel execution. The final documentation formatting and whitespace checks passed; only the framework pair, lockfile, version guidance, and update-checker comment changed.
+
+The original rollout notes still apply, including encrypted OTP cutover and the pending stage 4 live-site check. This follow-up does not deploy, migrate a hosted database, send real email, or complete a product stage.
