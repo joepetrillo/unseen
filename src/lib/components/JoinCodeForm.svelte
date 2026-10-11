@@ -1,6 +1,5 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
-  import type { Attachment } from "svelte/attachments";
 
   import {
     INVITE_CODE_ALPHABET,
@@ -32,37 +31,6 @@
     // leaves `code` as it was, so put the cleaned value back by hand.
     event.currentTarget.value = code;
   }
-
-  // iOS Safari focuses this field when the page loads, opening the keyboard
-  // on every refresh (seen on an iPhone; desktop browsers don't). Undo focus
-  // that arrives while the page is loading, before the person has tapped or
-  // pressed a key. Only then: later focus (VoiceOver moving into the field,
-  // say) is never undone.
-  const LOAD_WINDOW_MS = 2000;
-  const ignoreFocusBeforeInteraction: Attachment<HTMLInputElement> = (
-    input
-  ) => {
-    const mountedAt = performance.now();
-    let interacted = false;
-    const interact = () => {
-      interacted = true;
-    };
-    const onFocus = () => {
-      const loading = performance.now() - mountedAt < LOAD_WINDOW_MS;
-      if (loading && !interacted) input.blur();
-    };
-    // Capture: counts the interaction before the focus it causes.
-    const options = { capture: true, once: true } as const;
-    document.addEventListener("pointerdown", interact, options);
-    document.addEventListener("keydown", interact, options);
-    input.addEventListener("focus", onFocus);
-    if (document.activeElement === input) input.blur();
-    return () => {
-      document.removeEventListener("pointerdown", interact, options);
-      document.removeEventListener("keydown", interact, options);
-      input.removeEventListener("focus", onFocus);
-    };
-  };
 </script>
 
 <!-- Posts to the current page's `find` action (see findInvite). -->
@@ -83,7 +51,6 @@
         name="code"
         value={code}
         oninput={keepCodeCharacters}
-        {@attach ignoreFocusBeforeInteraction}
         required
         minlength={INVITE_CODE_LENGTH}
         autocomplete="off"
