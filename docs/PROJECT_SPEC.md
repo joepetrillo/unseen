@@ -29,8 +29,9 @@ Movies only. US region only (release dates, age ratings). TV shows are a possibl
 ### Sessions
 
 - **One active session per group.** Tapping **Find a movie** while one is active offers **Resume** or **Start fresh** (which closes the old one).
-- The person who starts it is the **host** and picks **who's watching tonight** (a subset of the group). Solo sessions are allowed.
-- Optional filters (see Filters). **Changing filters starts a new session.**
+- Any group member can start one. The person who starts it is the **host** and picks **who's watching tonight** (a subset of the group). Solo sessions are allowed.
+- Starting takes one tap: filters are optional and start collapsed ("Any length · All genres · Any year — Change"). See Filters.
+- **Changing filters starts a new session.** One **Change filters** tap ends the current session and opens the start screen with its filters prefilled (decided 2026-10-11).
 - Sessions **auto-close after 24 hours** without activity. The timer resets only on successful user changes (answers, undo, participant changes), never on reads, polling, or duplicate retries. The host can close one anytime. Closed sessions reject all changes.
 
 ### Answering
@@ -64,7 +65,7 @@ Each is a distinct message and UI state:
 
 Sort key, in order:
 
-1. **Previously matched movies last:** movies that were matches when one of this group's earlier sessions closed. Only history recorded **before this session started** counts, so another session can't reshuffle this one.
+1. **Previously matched movies last:** movies that were matches when one of this group's earlier sessions closed. Only history recorded **before this session started** counts, so another session can't reshuffle this one. Why: the rest of the order is fixed, so without this rule the next session with the same filters deals the same cards first and ends with the shortlist the group already passed on. Invisible in the UI.
 2. **Most Not seen confirmations** from other participants first ("finish what's started"), so each answer is likely to complete a match.
 3. **TMDB vote count**, descending (a proxy for how well-known a movie is; well-known movies are most likely seen, so they get eliminated fast).
 4. **Movie ID** as a stable tie-breaker.
@@ -72,37 +73,39 @@ Sort key, in order:
 Other rules:
 
 - **No cursors or page offsets.** Each fetch asks for "the top few eligible movies I haven't answered, excluding the ones already on my screen." Rankings shift as people answer, so a saved position would skip movies.
-- The card a person is looking at never changes under them. If someone else eliminates it meanwhile, skip it with a short note.
-- Minimum vote count floor to avoid obscure titles. Unreleased movies (US) excluded.
+- **The visible card never changes under you; queued cards refresh freely** (decided 2026-10-11). A card swapping as you tap would record your answer on a movie you didn't read, so only the visible card is fixed. Behind it the browser keeps a small queue (about 5, posters preloaded) so the next card appears instantly; every save response replaces that queue with the server's current top picks, excluding the visible card and answers still saving, which lets newly half-confirmed movies jump forward. Saves go out in the background, one at a time and in order. If someone else eliminates the visible card meanwhile, skip it with a short note.
+- Minimum vote count floor of **200** (decided 2026-10-11; one named constant in the deck module, revisit with the full catalog in stage 9) to avoid obscure titles. Unreleased movies (US) excluded.
 - TMDB **popularity** (a daily activity score) and TMDB **trending** (separate day/week lists) are different metrics. Neither is used in v1.
 - **Validate the ordering** once real data exists: measure time to first match and answers needed to reach 5 matches.
 
 ### Past-match history
 
-- Recorded **only when a session closes**: whatever is a match at that moment is saved for the group. Matches undone before closing are never recorded. Reading data never records history.
+- Recorded **only when a session closes**: whatever is a match at that moment is saved for the group. Matches undone before closing are never recorded. Reading data never records history. Stage 6 records on **End session** (and Change filters); stage 8 adds auto-close.
 
 ### Filters (v1)
 
-- **Runtime** (max minutes), **genre**, **release year** (range), **TMDB rating** (minimum).
+- **Runtime** (max minutes), **genre**, **release year** (range). Minimum TMDB rating was dropped from v1 (decided 2026-10-11).
 - Multiple genres mean **any of** (OR).
-- Movies missing runtime or rating are excluded only when that filter is active.
-- Later: actor (and whether it means top-billed only), age rating, trending mode.
+- Movies missing runtime or a release year are excluded only when that filter is active.
+- Stored as typed nullable columns on `watch_sessions` (section 3), not JSON.
+- Later: minimum rating, actor (and whether it means top-billed only), age rating, trending mode.
 
 ### Fixing mistakes and managing data
 
 - **Undo** is always visible while answering. Each person has their own undo stack **per session**; repeated undo steps back through that person's actions in that session only.
   - Undoing a Seen removes the seen entry only if **this action was the last one to confirm it**. If a later action (another session, the My Seen Movies page) confirmed it again, the entry stays.
   - Undoing a Not seen withdraws that confirmation, so the movie may leave the shortlist.
-- **"Actually, I've seen this"** on shortlist items.
+  - The undone movie comes back as the visible card, so it can be answered again.
+- **"Actually, I've seen this"** on shortlist items: recorded as a Seen answer that replaces your Not seen, so it's on your undo stack like any other answer.
 - **My Seen Movies** page: search by title, filter (genre, year, etc.), remove entries.
 - **Removing a seen entry lets your earlier Not seen answers count again.** They were your own answers, so if the Seen was a mistake, they're correct. (Deliberate rule; no extra invalidation logic.)
 - All seen-list changes (answers, undo, corrections, page edits) go through **one server module**.
 - Always show year and poster (remakes share titles).
-- **Where to watch:** an external link only (e.g. TMDB's watch page), with no promise the movie is actually available.
+- **Where to watch:** an external link only, to TMDB's watch page (`https://www.themoviedb.org/movie/{id}/watch?locale=US`), with no promise the movie is actually available. TMDB asks apps to link there because it holds the provider deep links. Showing provider names in our own UI was considered and dropped (2026-10-11): TMDB's provider data needs JustWatch attribution and frequent refreshes.
 
 ### Scope
 
-**v1:** auth, groups, one active session per group with Resume/Start fresh, host and "who's watching tonight", invites, host removal, host transfer, 24-hour auto-close, v1 filters, Seen/Not seen answering, shortlist with review prompt and Find more, deck ordering including past-match deprioritizing, per-session undo, shortlist correction, My Seen Movies page, the four session states, unreleased excluded, where-to-watch link.
+**v1:** auth, groups, one active session per group with Resume/Start fresh, host and "who's watching tonight", invites, host removal, host transfer, 24-hour auto-close, v1 filters (runtime, genre, year), Seen/Not seen answering, shortlist with review prompt and Find more, deck ordering including past-match deprioritizing, per-session undo, shortlist correction, My Seen Movies page, the four session states, unreleased excluded, where-to-watch link.
 
 **Later:** optional warm-up for new users (about 50 most-rated movies), Letterboxd CSV import, "allow 1 person who's seen it" leniency for big groups (off by default), actor/age-rating/trending filters, IMDb/Rotten Tomatoes scores via OMDb, verified streaming availability, real-time updates, TV shows.
 
@@ -132,11 +135,11 @@ Other rules:
 - **groups** (ID generated by the browser with the create action, so a retried create lands on the same group; name; `invite_code`, unique), **group_members** (group, user, role owner/member, nickname, joined_at; primary key (group, user); unique (group, lower(nickname)); a partial unique index allows one owner per group), **invite_lookup_limits** (per-user window and count). Built in stage 5.
 - **movies** (catalog copy), **movie_genres**
 - **seen_movies** (user, movie, created_at, `last_confirmed_by_action`), primary key (user, movie), which also serves lookups by user. Built in stage 4 without `last_confirmed_by_action`, which only undo reads (stage 6). Named `seen` until stage 4; renamed because the other tables are plural nouns.
-- **watch_sessions** (group, host, filters, status active/closed, `revision` counter, last_activity_at); at most one active per group (partial unique index)
+- **watch_sessions** (group, host, filters as typed nullable columns: max runtime, year range, genre IDs, status active/closed, `revision` counter, last_activity_at); at most one active per group (partial unique index)
 - **watch_session_participants** — one row per participation (ID, watch session, user, status invited/active/removed, joined_at)
 - **watch_session_answers** (participation, movie, answer), unique per participation+movie; current answers only
 - **actions** — action log for idempotency and undo: action ID (client-generated, primary key), user, participation, type (seen / not_seen / undo / seen_list_remove / …), movie, result, undone flag, created_at. Reusing an action ID with a different payload fails. The payload is compared column by column (user, type, movie, later participation) rather than through a stored hash: it's a few typed columns, so a hash would only hide them. Stage 4 built ID, user, type (`seen_list_add`, `seen_list_remove`), movie, and created_at. Stage 5 made `movie_id` nullable and added the group actions' inputs as nullable typed columns: `group_id`, `member_id`, `group_name`, `nickname`. They have no foreign keys, so the log outlives a deleted group (a retried delete is still a duplicate). A retry must match every input column. The other columns come with the stages that need them.
-- **group_past_matches** (group, movie, recorded_at), written when a session closes
+- **group_past_matches** (group, movie, recorded_at), written when a session closes. Built in stage 6 (recorded on End session); stage 8 adds auto-close
 - The **shortlist is derived**, never stored.
 
 ## 4. Correctness rules
@@ -193,7 +196,7 @@ Server code runs as Node.js functions on Vercel **Fluid compute**: one warm inst
 | Framework | Svelte 5 + SvelteKit 3.0.1 (stable, pinned), Vercel adapter 7.0.0 | Learning goal. Adopted before stable (Sep 2026); upgraded the framework/adapter pair to stable in the Oct 2026 audit. Existing Kit 3 APIs retained |
 | Language | TypeScript (strict) |  |
 | Styling | Tailwind CSS |  |
-| Components | shadcn-svelte (built on Bits UI), Bits UI directly for custom pieces | Headless, accessible, owned code |
+| Components | shadcn-svelte (built on Bits UI), **Maia** style, Bits UI directly for custom pieces | Headless, accessible, owned code. Maia (soft, rounded, generous spacing) chosen for a mobile-first, iOS-native feel (2026-10-11). Kit 3 setup: the CLI needs `#lib/...` aliases (see `components.json`); generated code is adjusted to our lint rules (section 8, stage 6 entry) |
 | Database | Neon Postgres | Relational data; the deck is a SQL exclusion query |
 | DB library | Drizzle v1 release candidate, pinned (`node-postgres` driver over Neon's pooler; see section 5b) | Reads like SQL, so it teaches what's happening. v1 chosen so the relations/query API learned is the one that stays; Better Auth supports it via its relations-v2 adapter |
 | Validation | Zod 4 | All external input (TMDB, env vars, later forms and URL params); types come from `z.infer`. Chosen over Valibot/ArkType (Sep 2026) for familiarity and ecosystem: Better Auth already depends on it, Kit's `defineEnvVars` accepts it (Standard Schema) |
@@ -210,9 +213,10 @@ Not needed for v1: WebSockets or real-time services, Redis, job queues (BullMQ),
 
 ## 7. Open details to decide together
 
-- Minimum vote count value
 - Exact polling intervals and backoff
 - How auto-close runs (checked on read vs. a scheduled job)
+
+Resolved in stage 6 (2026-10-11): minimum vote count (200).
 
 Resolved in stage 5 (2026-10-08): group size (100, hidden), invite method (one never-expiring invite per group, as link or code; any member shares, owner resets), names (per-group nicknames).
 
@@ -231,7 +235,7 @@ Design the schema with the whole spec in mind, but build features in stages. Eac
 3. **Auth.** Better Auth with email codes, protected routes. _Done when:_ you can sign in with a code on phone and laptop, signed-out users get redirected, and an end-to-end test covers sign-in.
 4. **Seen list.** The seen-list module (action IDs, transactions, `seen_version`) and the My Seen Movies page: add from a catalog search, search, filter, remove. _Done when:_ the page works on the live site, and tests prove a retried action changes nothing and a reused action ID with different input fails.
 5. **Groups and invites.** Create a group, invite someone, permission checks. _Done when:_ a second account can join your group, and a test proves non-members can't read or change it.
-6. **Solo session.** Session in a group with just you: deck query and ordering, filters, Seen/Not seen, matches, shortlist with "Actually, I've seen this", undo, where-to-watch link. _Done when:_ you can find unseen movies alone start to finish, and tests cover deck order, seen exclusion, filters, and undo conflicts.
+6. **Solo session.** Session in a group with just you: deck query and ordering (including past matches, recorded on End session), filters, Seen/Not seen, matches, shortlist with review prompt and "Actually, I've seen this", undo, where-to-watch link, End session and Change filters. Adopts shadcn-svelte and converts the existing pages to its primitives. _Done when:_ you can find unseen movies alone start to finish, and tests cover deck order, seen exclusion, filters, and undo conflicts.
 7. **Group sessions.** Multiple participants, polling fingerprint, the four session states. _Done when:_ two browsers on different accounts see each other's answers within seconds and reach a shared match, and tests cover simultaneous answers, stale poll responses, and polling during saves.
 8. **Session lifecycle.** Accepting session invites, host removal and transfer, rejoining, Resume/Start fresh, 24-hour auto-close, past matches. _Done when:_ each rule in the spec's Participants and Sessions sections has a passing test.
 9. **Full catalog sync.** Partitioned seed, enrichment, scheduled GitHub Actions job, alerts. _Done when:_ the full catalog is loaded, a scheduled run succeeds, an interrupted run resumes, and a forced failure sends an alert.
