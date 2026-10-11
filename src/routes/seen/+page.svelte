@@ -11,7 +11,7 @@
   // A link to this page with the current search, changed by `changes`. Every
   // change goes back to page 1 unless it sets the page, and default values are
   // left out to keep URLs short.
-  function searchHref(changes: Partial<PageProps["data"]["search"]>): string {
+  function searchHref(changes: Partial<PageProps["data"]["search"]>) {
     const { scope, title, genre, decade, page } = {
       ...data.search,
       page: 1,
@@ -24,7 +24,8 @@
     if (decade !== undefined) params.decade = String(decade);
     if (page > 1) params.page = String(page);
     const query = new URLSearchParams(params).toString();
-    return query === "" ? resolve("seen") : `${resolve("seen")}?${query}`;
+    // `resolve` accepts a query string, so links keep Kit's resolved-path type.
+    return resolve(query === "" ? "seen" : `seen?${query}`);
   }
 
   let filtered = $derived(
