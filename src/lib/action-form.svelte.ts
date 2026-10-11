@@ -11,6 +11,12 @@ interface Options {
    * sends nothing. Gets the form's fields, for questions that name a row.
    */
   confirm?: (formData: FormData) => string;
+  /**
+   * What the action applies to when that isn't in the form (the group in the
+   * URL, say). Part of the input, so an ID kept for one group is never
+   * resent for another when the page is reused for a different group.
+   */
+  scope?: () => string;
 }
 
 /**
@@ -46,9 +52,10 @@ export class ActionForm {
 
     const idFields = ["actionId", ...(this.#options.newIds ?? [])];
     // What the person asked for: every field except the generated IDs.
-    const input = JSON.stringify(
-      [...formData].filter(([name]) => !idFields.includes(name))
-    );
+    const input = JSON.stringify([
+      this.#options.scope?.() ?? null,
+      ...[...formData].filter(([name]) => !idFields.includes(name)),
+    ]);
     if (this.#unanswered?.input !== input) {
       this.#unanswered = {
         input,

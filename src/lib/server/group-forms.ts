@@ -94,7 +94,11 @@ export async function findInvite({
   locals: App.Locals;
 }) {
   const user = requireUser(locals);
-  const fields = await request.formData().catch(() => null);
+  // Like readForm: only a malformed body is the person's input problem.
+  const fields = await request.formData().catch((error: unknown) => {
+    if (error instanceof TypeError) return null;
+    throw error;
+  });
   const code = inviteCodeSchema.safeParse(fields?.get("code"));
   if (!code.success) return fail(400, { codeError: INACTIVE_CODE });
 

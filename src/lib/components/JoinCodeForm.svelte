@@ -34,18 +34,22 @@
   }
 
   // iOS Safari focuses this field when the page loads, opening the keyboard
-  // on every refresh (seen on an iPhone; desktop browsers don't). Undo any
-  // focus that arrives before the person has tapped or pressed a key on the
-  // page; a real tap, or Tab, still focuses it.
+  // on every refresh (seen on an iPhone; desktop browsers don't). Undo focus
+  // that arrives while the page is loading, before the person has tapped or
+  // pressed a key. Only then: later focus (VoiceOver moving into the field,
+  // say) is never undone.
+  const LOAD_WINDOW_MS = 2000;
   const ignoreFocusBeforeInteraction: Attachment<HTMLInputElement> = (
     input
   ) => {
+    const mountedAt = performance.now();
     let interacted = false;
     const interact = () => {
       interacted = true;
     };
     const onFocus = () => {
-      if (!interacted) input.blur();
+      const loading = performance.now() - mountedAt < LOAD_WINDOW_MS;
+      if (loading && !interacted) input.blur();
     };
     // Capture: counts the interaction before the focus it causes.
     const options = { capture: true, once: true } as const;

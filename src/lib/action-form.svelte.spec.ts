@@ -83,3 +83,16 @@ describe("ActionForm", () => {
     confirm.mockRestore();
   });
 });
+
+describe("ActionForm scope", () => {
+  it("never resends an ID kept for a different scope", async () => {
+    let groupId = "group-a";
+    const form = new ActionForm({ scope: () => groupId });
+    const first = submit(form, {});
+    await first.answer(noAnswer);
+
+    groupId = "group-b";
+    const other = submit(form, {});
+    expect(other.sent.actionId).not.toBe(first.sent.actionId);
+  });
+});

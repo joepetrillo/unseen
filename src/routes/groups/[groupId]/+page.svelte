@@ -24,13 +24,18 @@
     );
   }
 
-  const rename = new ActionForm();
-  const nickname = new ActionForm();
+  // The page component is reused if the URL moves to another group, so tie
+  // each form's pending action ID to this group.
+  const scope = () => group.id;
+  const rename = new ActionForm({ scope });
+  const nickname = new ActionForm({ scope });
   const remove = new ActionForm({
+    scope,
     confirm: (formData) =>
       `Remove ${nicknameOf(formData.get("memberId"))} from ${group.name}? They can rejoin with the invite.`,
   });
   const leave = new ActionForm({
+    scope,
     confirm: () =>
       nextOwner === undefined
         ? `Leave ${group.name}? You're the last one in it, so the group will be deleted.`
@@ -39,6 +44,7 @@
           : `Leave ${group.name}?`,
   });
   const deletion = new ActionForm({
+    scope,
     confirm: () => `Delete ${group.name} for everyone? This can't be undone.`,
   });
 </script>
@@ -50,6 +56,7 @@
   <h1 class="mt-2 text-2xl font-bold break-words">{group.name}</h1>
 
   <InviteCard
+    groupId={group.id}
     groupName={group.name}
     code={group.inviteCode}
     url={data.inviteUrl}

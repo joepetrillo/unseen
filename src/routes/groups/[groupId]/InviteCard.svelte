@@ -4,18 +4,20 @@
   import { ActionForm } from "#lib/action-form.svelte.ts";
 
   interface Props {
+    groupId: string;
     groupName: string;
     code: string;
     url: string;
     isOwner: boolean;
   }
 
-  let { groupName, code, url, isOwner }: Props = $props();
+  let { groupId, groupName, code, url, isOwner }: Props = $props();
 
   // What the share button last did, shown next to it.
   let status = $state<string | null>(null);
 
   const reset = new ActionForm({
+    scope: () => groupId,
     confirm: () =>
       "Make a new invite? The current link and code will stop working.",
   });

@@ -9,6 +9,55 @@ import ts from "typescript-eslint";
 
 const gitignorePath = path.resolve(import.meta.dirname, ".gitignore");
 
+const writePaths = [
+  {
+    owner: "src/lib/server/seen-list.ts",
+    selector:
+      "CallExpression[callee.property.name=/^(insert|update|delete)$/][arguments.0.name='seenMovies']",
+    message:
+      "Change seen lists only through #lib/server/seen-list.ts (it bumps users.seen_version).",
+  },
+  {
+    owner: "src/lib/server/groups.ts",
+    selector:
+      "CallExpression[callee.property.name=/^(insert|update|delete)$/][arguments.0.name=/^(groups|groupMembers|inviteLookupLimits)$/]",
+    message:
+      "Change groups only through #lib/server/groups.ts (it locks the group and logs the action).",
+  },
+  {
+    owner: "src/lib/server/actions.ts",
+    selector:
+      "CallExpression[callee.property.name=/^(insert|update|delete)$/][arguments.0.name='actions']",
+    message:
+      "Write the actions log only through runAction in #lib/server/actions.ts.",
+  },
+];
+
+function writePathBlocks() {
+  const restrict = (paths) => ({
+    "no-restricted-syntax": [
+      "error",
+      ...paths.map(({ selector, message }) => ({ selector, message })),
+    ],
+  });
+  return [
+    {
+      files: ["src/**/*.ts", "src/**/*.svelte", "scripts/**/*.ts"],
+      ignores: [
+        ...writePaths.map(({ owner }) => owner),
+        "src/**/*.spec.ts",
+        "src/**/*.e2e.ts",
+        "src/lib/server/testing/**",
+      ],
+      rules: restrict(writePaths),
+    },
+    ...writePaths.map(({ owner }) => ({
+      files: [owner],
+      rules: restrict(writePaths.filter((path) => path.owner !== owner)),
+    })),
+  ];
+}
+
 export default defineConfig(
   includeIgnoreFile(gitignorePath),
   js.configs.recommended,
@@ -54,43 +103,12 @@ export default defineConfig(
       ],
     },
   },
-  {
-    // One write path per table, so every change bumps its counters and is
-    // logged as an action (AGENTS.md "Architecture rules"). Tests may write
-    // fixtures directly.
-    files: ["src/**/*.ts", "src/**/*.svelte", "scripts/**/*.ts"],
-    ignores: [
-      "src/lib/server/seen-list.ts",
-      "src/lib/server/actions.ts",
-      "src/lib/server/groups.ts",
-      "src/**/*.spec.ts",
-      "src/**/*.e2e.ts",
-      "src/lib/server/testing/**",
-    ],
-    rules: {
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector:
-            "CallExpression[callee.property.name=/^(insert|update|delete)$/][arguments.0.name='seenMovies']",
-          message:
-            "Change seen lists only through #lib/server/seen-list.ts (it bumps users.seen_version).",
-        },
-        {
-          selector:
-            "CallExpression[callee.property.name=/^(insert|update|delete)$/][arguments.0.name=/^(groups|groupMembers|inviteLookupLimits)$/]",
-          message:
-            "Change groups only through #lib/server/groups.ts (it locks the group and logs the action).",
-        },
-        {
-          selector:
-            "CallExpression[callee.property.name=/^(insert|update|delete)$/][arguments.0.name='actions']",
-          message:
-            "Write the actions log only through runAction in #lib/server/actions.ts.",
-        },
-      ],
-    },
-  },
+  // One write path per table, so every change bumps its counters and is
+  // logged as an action (AGENTS.md "Architecture rules"). Tests may write
+  // fixtures directly. Each owner module is exempt from its own rule only:
+  // flat config doesn't merge one rule's options across blocks, so every
+  // owner gets a block listing the other rules.
+  ...writePathBlocks(),
   {
     // Inside .svelte files, the <script lang="ts"> block is parsed with the TypeScript parser.
     files: ["**/*.svelte", "**/*.svelte.ts", "**/*.svelte.js"],
