@@ -2,7 +2,7 @@
 
 Finds movies nobody in a group has seen. The current application has email-code sign-in, a movie catalog, a personal seen list with search, filters, and pagination, groups joined by invite link or code, and solo watch sessions (deal, answer Seen / Not seen, undo, shortlist). Group sessions with several people are later stages in the [product spec](docs/PROJECT_SPEC.md).
 
-Live domain: [www.vunu.app](https://www.vunu.app). `vunu.app` redirects there. Repository: [joepetrillo/vunu](https://github.com/joepetrillo/vunu).
+Live domain: [vunu.app](https://vunu.app). `www.vunu.app` redirects there. Repository: [joepetrillo/vunu](https://github.com/joepetrillo/vunu).
 
 SvelteKit 3.0.1 stable, Svelte 5, TypeScript, Drizzle 1.0.0-rc.4, Neon Postgres through `pg`, Better Auth, Resend, and Vercel's Node adapter 7.0.0. The audit fixes, stable framework upgrade, and Vunu rebrand are implemented. The [audit](docs/AUDIT.md) records historical versions, source references, verification, and rollout notes; `bun.lock` records current resolved versions. [AGENTS.md](AGENTS.md) holds contributor conventions.
 
