@@ -45,3 +45,10 @@ export const excludeSchema = z
   .pipe(
     z.array(z.string().transform(Number).pipe(z.int().positive())).max(100)
   );
+
+/** The card on the browser's screen, if any (empty when there's none). */
+export const visibleSchema = z
+  .string()
+  .default("")
+  .transform((value) => (value === "" ? null : Number(value)))
+  .pipe(z.int().positive().nullable());

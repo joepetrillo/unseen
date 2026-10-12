@@ -1,4 +1,4 @@
-import { inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -21,6 +21,8 @@ import {
   joinWatchSession,
   listMatches,
   listParticipants,
+  pollWatchSession,
+  readDeckState,
   startWatchSession,
   undoLastAnswer,
   VOTE_COUNT_FLOOR,
@@ -871,6 +873,192 @@ describe("invitations", () => {
     expect(
       await startWatchSession(db, { ...input, invitedUserIds: [a.userId] })
     ).toBe("conflict");
+  });
+});
+
+describe("together: polling and simultaneous answers", () => {
+  // The world's user hosts; a second member has accepted.
+  async function startTogether() {
+    const guest: World = { ...world, userId: await fixtures.user() };
+    await createGroupMembership(guest);
+    const watchSessionId = id();
+    await startWatchSession(db, {
+      actionId: id(),
+      userId: world.userId,
+      groupId: world.groupId,
+      watchSessionId,
+      filters: { ...NO_FILTERS, genreIds: [world.genreId] },
+      replacedWatchSessionId: null,
+      invitedUserIds: [guest.userId],
+    });
+    const host = {
+      id: watchSessionId,
+      participationId: await participation(world.userId, watchSessionId),
+    };
+    const guestSession = {
+      id: watchSessionId,
+      participationId: await participation(guest.userId, watchSessionId),
+    };
+    expect(
+      await joinWatchSession(db, {
+        actionId: id(),
+        userId: guest.userId,
+        watchSessionId,
+        participationId: guestSession.participationId,
+      })
+    ).toBe("applied");
+    await db
+      .update(groupMembers)
+      .set({ nickname: "Sam" })
+      .where(
+        and(
+          eq(groupMembers.groupId, world.groupId),
+          eq(groupMembers.userId, guest.userId)
+        )
+      );
+    return { guest, host, guestSession };
+  }
+
+  const read = (session: Session, visible: number | null = null) =>
+    readDeckState(db, {
+      watchSessionId: session.id,
+      participationId: session.participationId,
+      exclude: visible === null ? [] : [visible],
+      visible,
+    });
+
+  const poll = (userId: string, session: Session, since: string) =>
+    pollWatchSession(db, {
+      userId,
+      watchSessionId: session.id,
+      participationId: session.participationId,
+      since,
+      exclude: [],
+      visible: null,
+    });
+
+  it("answers a poll with the same fingerprint as unchanged", async () => {
+    await movie(world);
+    const { host } = await startTogether();
+    const { fingerprint } = await read(host);
+    expect(await poll(world.userId, host, fingerprint)).toEqual({
+      status: "unchanged",
+    });
+    // Reading changes nothing, so the fingerprint stays.
+    expect((await read(host)).fingerprint).toBe(fingerprint);
+  });
+
+  it("changes the fingerprint when someone else answers", async () => {
+    const m = await movie(world);
+    const { guest, host, guestSession } = await startTogether();
+    await answer(world, host, m, "not_seen");
+    const before = (await read(host)).fingerprint;
+
+    await answer(guest, guestSession, m, "not_seen");
+    const reply = await poll(world.userId, host, before);
+    expect(reply.status).toBe("changed");
+    if (reply.status !== "changed") return;
+    expect(reply.state.fingerprint).not.toBe(before);
+    expect(reply.state.matchCount).toBe(1);
+  });
+
+  it("changes the fingerprint when a participant's seen list changes elsewhere", async () => {
+    const m = await movie(world);
+    const { guest, host } = await startTogether();
+    const before = await read(host);
+    expect(before.cards.map((card) => card.id)).toEqual([m]);
+
+    // On the Seen movies page, outside the session: only seen_version moves.
+    await addToSeenList(db, {
+      actionId: id(),
+      userId: guest.userId,
+      movieId: m,
+    });
+    const reply = await poll(world.userId, host, before.fingerprint);
+    expect(reply.status).toBe("changed");
+    if (reply.status !== "changed") return;
+    expect(reply.state.cards).toEqual([]);
+  });
+
+  it("tells a poll the session ended, or that it isn't yours", async () => {
+    await movie(world);
+    const { guest, host } = await startTogether();
+    // Someone else's participation gets the same reply as an ended session.
+    expect((await poll(guest.userId, host, "")).status).toBe("ended");
+
+    await endWatchSession(db, {
+      actionId: id(),
+      userId: world.userId,
+      watchSessionId: host.id,
+    });
+    expect((await poll(world.userId, host, "")).status).toBe("ended");
+  });
+
+  it("says who you're waiting on once you've answered everything", async () => {
+    const m = await movie(world);
+    const { guest, host, guestSession } = await startTogether();
+    // With a card on screen, nobody is waited on yet.
+    expect((await read(host, m)).waitingOn).toBe(null);
+
+    await answer(world, host, m, "not_seen");
+    expect((await read(host)).waitingOn).toEqual(["Sam"]);
+
+    // Sam answers: a match, and nothing left for anyone.
+    await answer(guest, guestSession, m, "not_seen");
+    const done = await read(host);
+    expect(done.waitingOn).toEqual([]);
+    expect(done.matchCount).toBe(1);
+  });
+
+  it("reports the card on screen when someone else rules it out", async () => {
+    const m = await movie(world);
+    const { guest, host, guestSession } = await startTogether();
+    expect((await read(host, m)).ruledOut).toBe(null);
+
+    await answer(guest, guestSession, m, "seen");
+    const state = await read(host, m);
+    expect(state.ruledOut).toBe(m);
+    // You were looking at the last card: now there's nothing left.
+    expect(state.waitingOn).toEqual([]);
+  });
+
+  it("counts a match once when both answer Not seen at the same moment", async () => {
+    const m = await movie(world);
+    const { guest, host, guestSession } = await startTogether();
+    const outcomes = await Promise.all([
+      answer(world, host, m, "not_seen"),
+      answer(guest, guestSession, m, "not_seen"),
+    ]);
+    expect(outcomes).toEqual(["applied", "applied"]);
+    expect(await matchIds(host)).toEqual([m]);
+    expect((await read(host)).matchCount).toBe(1);
+  });
+
+  it("never matches a movie when Seen and Not seen arrive at the same moment", async () => {
+    const m = await movie(world);
+    const { guest, host, guestSession } = await startTogether();
+    await Promise.all([
+      answer(world, host, m, "not_seen"),
+      answer(guest, guestSession, m, "seen"),
+    ]);
+    expect(await matchIds(host)).toEqual([]);
+    expect(await seenList(guest.userId)).toEqual([m]);
+    expect(await deal(host)).toEqual([]);
+  });
+
+  it("bumps the revision once per answer, even when they overlap", async () => {
+    const movies = [await movie(world), await movie(world), await movie(world)];
+    const { guest, host, guestSession } = await startTogether();
+    const before = (await revision(host.id)) ?? 0;
+    await Promise.all(
+      movies.flatMap((m) => [
+        answer(world, host, m, "not_seen"),
+        answer(guest, guestSession, m, "not_seen"),
+      ])
+    );
+    // Six answers, six bumps: none lost to a race.
+    expect(await revision(host.id)).toBe(before + 6);
+    expect((await matchIds(host)).sort()).toEqual([...movies].sort());
   });
 });
 

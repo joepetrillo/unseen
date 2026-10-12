@@ -1,8 +1,14 @@
 import { type ActionResult, deserialize } from "$app/forms";
 
-import { type MovieCard, REVIEW_PROMPT_AT } from "#lib/watch-fields.ts";
-
-import type { DeckState } from "./+page.server.ts";
+import {
+  type DeckState,
+  type MovieCard,
+  REVIEW_PROMPT_AT,
+} from "#lib/watch-fields.ts";
+import {
+  subscribeToWatchSession,
+  type WatchSessionSubscription,
+} from "#lib/watch-session-updates.ts";
 
 export type Answer = "seen" | "not_seen";
 
@@ -42,6 +48,10 @@ const UNDO_FAILED = "Couldn't undo. Check your connection and try again.";
  *   the queue. The visible card never changes under you.
  * - Undo takes back an answer that hasn't been sent yet right here, and
  *   otherwise waits for the save in flight, then asks the server.
+ * - Between saves, a poll (`connect`) brings in other people's changes the
+ *   same way. Polls pause while a save or undo is on its way, and a poll
+ *   that started before one is ignored, so it can't undo what you just did.
+ *   If someone else rules out the card on screen, it's skipped with a note.
  *
  * A class with `$state` fields, in a .svelte.ts module so runes work: the
  * page reads `deck.cards` and updates when it changes, with no store.
@@ -64,6 +74,15 @@ export class Deck {
   reviewPrompt = $state(false);
   /** The latest answer, so the card can leave in that answer's direction. */
   lastAnswer = $state<Answer>("not_seen");
+  /**
+   * With nothing left for you to answer: who still has movies to answer.
+   * Empty means nobody does (the filters are used up); null, not known yet.
+   */
+  waitingOn = $state.raw<string[] | null>(null);
+  /** A card someone else ruled out while it was on your screen. */
+  skipped = $state<string | null>(null);
+  /** The last poll didn't reach the server. */
+  offline = $state(false);
 
   // What the server last said about undo; unsent answers add to it.
   #serverCanUndo = $state(false);
@@ -73,12 +92,42 @@ export class Deck {
   #sending = false;
   #whenIdle: (() => void)[] = [];
   #undoId: string | null = null;
+  #fingerprint: string;
+  #updates: WatchSessionSubscription | null = null;
 
   constructor(participationId: string, state: DeckState) {
     this.#participationId = participationId;
     this.cards = state.cards;
     this.matchCount = state.matchCount;
     this.#serverCanUndo = state.canUndo;
+    this.waitingOn = state.waitingOn;
+    this.#fingerprint = state.fingerprint;
+  }
+
+  /**
+   * Starts following other people's changes; returns the function that
+   * stops. `onEnded` runs when the session ends or you're no longer in it.
+   */
+  connect(watchSessionId: string, onEnded: () => void): () => void {
+    const updates = subscribeToWatchSession(watchSessionId, {
+      fingerprint: this.#fingerprint,
+      query: () => ({
+        participationId: this.#participationId,
+        ...this.#held(),
+      }),
+      onChange: (reply) => {
+        if (reply.status === "changed") this.#apply(reply.state);
+        else onEnded();
+      },
+      onConnection: (ok) => {
+        this.offline = !ok;
+      },
+    });
+    this.#updates = updates;
+    return () => {
+      updates.stop();
+      this.#updates = null;
+    };
   }
 
   get card(): MovieCard | undefined {
@@ -98,6 +147,7 @@ export class Deck {
     const card = this.cards[0];
     if (card === undefined || this.undoing || this.refused !== null) return;
     this.lastAnswer = answer;
+    this.skipped = null;
     this.cards = this.cards.slice(1);
     this.#saves.push({ actionId: crypto.randomUUID(), card, answer });
     this.pending = this.#saves.length;
@@ -133,6 +183,7 @@ export class Deck {
     }
 
     this.undoing = true;
+    const release = this.#updates?.hold();
     try {
       // The save in flight must land first, or the server would undo the
       // answer before it.
@@ -164,6 +215,7 @@ export class Deck {
       this.#serverCanUndo = canUndo;
     } finally {
       this.undoing = false;
+      release?.();
     }
   }
 
@@ -173,6 +225,7 @@ export class Deck {
     this.#sending = true;
     this.saving = true;
     this.error = null;
+    const release = this.#updates?.hold();
     try {
       for (
         let save = this.#saves[0];
@@ -184,11 +237,7 @@ export class Deck {
           participationId: this.#participationId,
           movieId: String(save.card.id),
           answer: save.answer,
-          // The next deal skips what's on screen and what's still waiting.
-          exclude: [
-            ...(this.card === undefined ? [] : [this.card.id]),
-            ...this.#saves.map((waiting) => waiting.card.id),
-          ].join(","),
+          ...this.#held(),
         });
         // No answer from the server: the save may have gone through, so it
         // stays first in line with its ID, for `retry()`.
@@ -208,25 +257,49 @@ export class Deck {
           return;
         }
         if (result.type === "success" && result.data !== undefined) {
-          this.#refresh(result.data);
+          this.#apply(result.data);
         }
       }
     } finally {
       this.#sending = false;
       this.saving = false;
+      release?.();
       for (const resolve of this.#whenIdle.splice(0)) resolve();
     }
   }
 
-  // A save's reply: fresh cards replace the queue behind the visible card,
-  // skipping anything answered since the request went out.
-  #refresh({ cards, matchCount, canUndo }: DeckState): void {
-    const answered = this.#saves.map((save) => save.card.id);
+  // What the deck holds, for the server: the card on screen, and with the
+  // answers still waiting, everything the next deal must skip.
+  #held(): { visible: string; exclude: string } {
     const visible = this.card;
+    return {
+      visible: visible === undefined ? "" : String(visible.id),
+      exclude: [
+        ...(visible === undefined ? [] : [visible.id]),
+        ...this.#saves.map((waiting) => waiting.card.id),
+      ].join(","),
+    };
+  }
+
+  // A save's or poll's reply: fresh cards replace the queue behind the
+  // visible card, skipping anything answered since the request went out.
+  // The visible card stays, unless someone else has ruled it out.
+  #apply(state: DeckState): void {
+    const { cards, matchCount, canUndo, waitingOn, fingerprint } = state;
+    this.#fingerprint = fingerprint;
+    this.#updates?.saw(fingerprint);
+    const answered = this.#saves.map((save) => save.card.id);
+    let visible = this.card;
+    // Only if it's still the card on screen: you may have moved on since.
+    if (state.ruledOut !== null && visible?.id === state.ruledOut) {
+      this.skipped = visible.title;
+      visible = undefined;
+    }
     const fresh = cards.filter(
       (card) => !answered.includes(card.id) && card.id !== visible?.id
     );
     this.cards = visible === undefined ? fresh : [visible, ...fresh];
+    this.waitingOn = waitingOn;
     if (this.matchCount < REVIEW_PROMPT_AT && matchCount >= REVIEW_PROMPT_AT) {
       this.reviewPrompt = true;
     }

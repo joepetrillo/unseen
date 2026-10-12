@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import {
   and,
   asc,
@@ -33,12 +35,18 @@ import {
   movieGenres,
   movies,
   seenMovies,
+  users,
   watchSessionAnswers,
   watchSessionParticipants,
   watchSessions,
 } from "#lib/server/db/schema.ts";
 import { confirmSeen, withdrawSeen } from "#lib/server/seen-list.ts";
-import type { MovieCard, WatchFilters } from "#lib/watch-fields.ts";
+import type {
+  DeckState,
+  MovieCard,
+  PollReply,
+  WatchFilters,
+} from "#lib/watch-fields.ts";
 
 // The only module that changes watch sessions, their participants, answers,
 // and the group's past matches. Every change is an action (applied at most
@@ -555,7 +563,7 @@ export async function getActiveWatchSessionId(
  * then TMDB vote count, then movie ID.
  */
 export async function dealCards(
-  db: Db,
+  db: Db | Transaction,
   {
     watchSessionId,
     participationId,
@@ -693,9 +701,157 @@ export async function listMatches(
   return withGenres(db, rows);
 }
 
+/** How many matches the session has (the deck shows only the count). */
+export async function countMatches(
+  db: Db | Transaction,
+  watchSessionId: string
+): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)`.mapWith(Number) })
+    .from(matchedMovies(db, watchSessionId).as("matched"));
+  return row?.count ?? 0;
+}
+
+interface DeckRequest {
+  watchSessionId: string;
+  participationId: string;
+  /** Cards the browser holds (on screen or waiting to save): not dealt. */
+  exclude: readonly number[];
+  /** The card on screen, if any. */
+  visible: number | null;
+}
+
+/**
+ * The deck's state for a participation, from one snapshot. Callers have
+ * already checked the participation is the user's.
+ */
+export function readDeckState(
+  db: Db,
+  request: DeckRequest
+): Promise<DeckState> {
+  return db.transaction((tx) => deckStateIn(tx, request), SNAPSHOT);
+}
+
+/**
+ * The poll (spec section 5): a tiny "unchanged" when the fingerprint the
+ * browser sends still matches, otherwise the deck's state, from one
+ * snapshot. Reads only: polling never counts as activity.
+ */
+export function pollWatchSession(
+  db: Db,
+  request: DeckRequest & { userId: string; since: string }
+): Promise<PollReply> {
+  const { userId, watchSessionId, participationId, since } = request;
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({
+        watchSessionId: participants.watchSessionId,
+        userId: participants.userId,
+        joinedAt: participants.joinedAt,
+        removedAt: participants.removedAt,
+        closedAt: watchSessions.closedAt,
+      })
+      .from(participants)
+      .innerJoin(
+        watchSessions,
+        eq(watchSessions.id, participants.watchSessionId)
+      )
+      .where(eq(participants.id, participationId));
+    if (
+      row?.userId !== userId ||
+      row.watchSessionId !== watchSessionId ||
+      row.joinedAt === null ||
+      row.removedAt !== null ||
+      row.closedAt !== null
+    ) {
+      return { status: "ended" };
+    }
+    if ((await fingerprintIn(tx, watchSessionId)) === since) {
+      return { status: "unchanged" };
+    }
+    return { status: "changed", state: await deckStateIn(tx, request) };
+  }, SNAPSHOT);
+}
+
+// Every read in the transaction sees the database as of its first query, so
+// the fingerprint and the state it describes always agree.
+const SNAPSHOT = {
+  isolationLevel: "repeatable read",
+  accessMode: "read only",
+} as const;
+
+async function deckStateIn(
+  tx: Transaction,
+  { watchSessionId, participationId, exclude, visible }: DeckRequest
+): Promise<DeckState> {
+  const fingerprint = await fingerprintIn(tx, watchSessionId);
+  const cards = await dealCards(tx, {
+    watchSessionId,
+    participationId,
+    exclude,
+  });
+  const matchCount = await countMatches(tx, watchSessionId);
+  const undoable = await canUndo(tx, participationId);
+  const ruledOut =
+    visible !== null && (await seenBySomeone(tx, watchSessionId, visible))
+      ? visible
+      : null;
+
+  // Nothing left for you (no card on screen, or it was just ruled out): who
+  // still has movies to answer? Their deck is the same pool minus their own
+  // answers, so ask it for one card each.
+  let waitingOn: string[] | null = null;
+  if (cards.length === 0 && (visible === null || ruledOut !== null)) {
+    waitingOn = [];
+    for (const person of await listParticipants(tx, watchSessionId)) {
+      if (!person.joined || person.participationId === participationId) {
+        continue;
+      }
+      const next = await dealCards(tx, {
+        watchSessionId,
+        participationId: person.participationId,
+        limit: 1,
+      });
+      if (next.length > 0) waitingOn.push(person.nickname);
+    }
+  }
+  return {
+    cards,
+    matchCount,
+    canUndo: undoable,
+    fingerprint,
+    waitingOn,
+    ruledOut,
+  };
+}
+
+// A short digest of the session's revision and each active participant's
+// seen-list version (spec section 5). Seen-list changes bump only the user's
+// counter, so every session they're in notices without writing to them.
+async function fingerprintIn(
+  tx: Transaction,
+  watchSessionId: string
+): Promise<string> {
+  const [session] = await tx
+    .select({ revision: watchSessions.revision })
+    .from(watchSessions)
+    .where(eq(watchSessions.id, watchSessionId));
+  const [seen] = await tx
+    .select({
+      versions: sql<
+        string | null
+      >`string_agg(${participants.id}::text || ':' || ${users.seenVersion}::text, ',' order by ${participants.id})`,
+    })
+    .from(participants)
+    .innerJoin(users, eq(users.id, participants.userId))
+    .where(activeIn(watchSessionId));
+  const source = `${String(session?.revision ?? "")}|${seen?.versions ?? ""}`;
+  return createHash("sha256").update(source).digest("base64url").slice(0, 16);
+}
+
 /** One movie as a card (an undone answer's movie, shown again). */
 export async function getCard(
-  db: Db,
+  db: Db | Transaction,
   movieId: number
 ): Promise<MovieCard | null> {
   const rows = await db
@@ -714,7 +870,7 @@ export async function getCard(
 
 /** Whether the participation has an answer left to undo. */
 export async function canUndo(
-  db: Db,
+  db: Db | Transaction,
   participationId: string
 ): Promise<boolean> {
   const [last] = await latestAnswers(db, participationId).limit(1);

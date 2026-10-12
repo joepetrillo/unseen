@@ -6,12 +6,13 @@ import { readForm } from "#lib/server/forms.ts";
 import { requireUser } from "#lib/server/require-user.ts";
 import {
   excludeSchema,
+  visibleSchema,
   watchRefusal,
 } from "#lib/server/watch-session-forms.ts";
 import {
   answerMovie,
   canUndo,
-  dealCards,
+  countMatches,
   endWatchSession,
   getActiveWatchSessionId,
   getCard,
@@ -19,31 +20,12 @@ import {
   joinWatchSession,
   listMatches,
   listParticipants,
+  readDeckState,
   undoLastAnswer,
 } from "#lib/server/watch-sessions.ts";
-import { describeFilters, type MovieCard } from "#lib/watch-fields.ts";
+import { describeFilters } from "#lib/watch-fields.ts";
 
 import type { Actions, PageServerLoad } from "./$types";
-
-/** What every deck response carries: the next cards and the counts. */
-export interface DeckState {
-  cards: MovieCard[];
-  matchCount: number;
-  canUndo: boolean;
-}
-
-async function deckState(
-  watchSessionId: string,
-  participationId: string,
-  exclude: readonly number[]
-): Promise<DeckState> {
-  const [cards, matches, undoable] = await Promise.all([
-    dealCards(db, { watchSessionId, participationId, exclude }),
-    listMatches(db, watchSessionId),
-    canUndo(db, participationId),
-  ]);
-  return { cards, matchCount: matches.length, canUndo: undoable };
-}
 
 export const load: PageServerLoad = async ({ params, locals }) => {
   const user = requireUser(locals);
@@ -107,7 +89,12 @@ export const load: PageServerLoad = async ({ params, locals }) => {
     ...base,
     view: "deck" as const,
     participationId: session.participation.id,
-    deck: await deckState(session.id, session.participation.id, []),
+    deck: await readDeckState(db, {
+      watchSessionId: session.id,
+      participationId: session.participation.id,
+      exclude: [],
+      visible: null,
+    }),
   };
 };
 
@@ -119,6 +106,7 @@ const answerSchema = z.object({
   movieId: movieIdSchema,
   answer: z.enum(["seen", "not_seen"]),
   exclude: excludeSchema,
+  visible: visibleSchema,
 });
 
 // Undo and join name the participation, nothing else.
@@ -142,12 +130,17 @@ export const actions = {
     const form = await readForm(request, answerSchema);
     if (!form.ok) return form.failure;
 
-    const { exclude, ...change } = form.data;
+    const { exclude, visible, ...change } = form.data;
     const failed = watchRefusal(
       await answerMovie(db, { ...change, userId: user.id, watchSessionId })
     );
     if (failed !== null) return failed;
-    return deckState(watchSessionId, change.participationId, exclude);
+    return readDeckState(db, {
+      watchSessionId,
+      participationId: change.participationId,
+      exclude,
+      visible,
+    });
   },
 
   undo: async ({ request, locals, params }) => {
@@ -166,12 +159,12 @@ export const actions = {
     if (failed !== null) return failed;
     // The undone movie goes back on screen in front of the current card; the
     // queue behind it stays, so no new cards are dealt here.
-    const [card, matches, undoable] = await Promise.all([
+    const [card, matchCount, undoable] = await Promise.all([
       movieId === null ? null : getCard(db, movieId),
-      listMatches(db, watchSessionId),
+      countMatches(db, watchSessionId),
       canUndo(db, participationId),
     ]);
-    return { card, matchCount: matches.length, canUndo: undoable };
+    return { card, matchCount, canUndo: undoable };
   },
 
   // Accepting an invitation. Success reloads the page, which shows the deck.

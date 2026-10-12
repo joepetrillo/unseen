@@ -34,6 +34,15 @@
     data.view === "deck" ? new Deck(data.participationId, data.deck) : null
   );
 
+  // Follow other people's answers while the deck is on screen. An effect is
+  // the right tool here: polling is an outside process that must start with
+  // the deck and stop when it goes (like useEffect's cleanup in React, or
+  // ngOnDestroy). When the session ends for you, reload into the ended view.
+  $effect(() => {
+    if (deck === null) return;
+    return deck.connect(data.session.id, () => void refreshAll());
+  });
+
   let groupHref = $derived(
     resolve("/groups/[groupId]", { groupId: data.session.groupId })
   );
@@ -75,6 +84,12 @@
     confirm: () =>
       "End this session? Its matches are saved and come up last next time.",
   });
+
+  // "Sam", "Sam and Alex", "Sam, Alex, and Jo".
+  const names = new Intl.ListFormat("en", { type: "conjunction" });
+  function listNames(people: string[]): string {
+    return names.format(people);
+  }
 
   function details(movie: MovieCard): string {
     return [
@@ -172,10 +187,22 @@
           </h1>
           <p class="mt-1 text-muted-foreground">{details(deck.card)}</p>
         </div>
-      {:else if !deck.exhausted}
+      {:else if !deck.exhausted || deck.waitingOn === null}
         <div class="flex items-center gap-3 text-muted-foreground">
           <Spinner />
           Dealing more movies…
+        </div>
+      {:else if deck.waitingOn.length > 0}
+        <!-- Never suggest other filters here: the movies exist, they just
+             need other people's answers. -->
+        <div class="text-center" aria-live="polite">
+          <p class="text-lg font-semibold">You're caught up</p>
+          <p class="mt-2 text-muted-foreground">
+            Waiting for {listNames(deck.waitingOn)} to answer.
+          </p>
+          <div class="mt-6 flex flex-col gap-3">
+            <Button size="lg" href={shortlistHref}>See the matches</Button>
+          </div>
         </div>
       {:else}
         <div class="text-center">
@@ -183,7 +210,9 @@
             That's every movie that fits these filters.
           </p>
           <p class="mt-2 text-muted-foreground">
-            Look over the matches, or change the filters for more.
+            {data.session.isHost
+              ? "Look over the matches, or change the filters for more."
+              : "Look over the matches. The host can change the filters for more."}
           </p>
           <div class="mt-6 flex flex-col gap-3">
             <Button size="lg" href={shortlistHref}>See the matches</Button>
@@ -222,6 +251,10 @@
             <span class="text-destructive">{deck.undoError}</span>
           {:else if deck.saving}
             Saving…
+          {:else if deck.offline}
+            Can't reach Vunu. Trying again…
+          {:else if deck.skipped !== null}
+            Someone has seen {deck.skipped}, so it's out.
           {/if}
         </p>
         {#if deck.error !== null}

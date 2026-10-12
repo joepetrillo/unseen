@@ -121,3 +121,34 @@ export function whereToWatchUrl(movieId: number): string {
 
 /** At this many matches the session suggests reviewing the shortlist. */
 export const REVIEW_PROMPT_AT = 5;
+
+/**
+ * What the deck shows, read at one moment (one database snapshot), so the
+ * fingerprint describes exactly these cards and counts.
+ */
+export interface DeckState {
+  /** The top cards to deal, skipping what the browser already holds. */
+  cards: MovieCard[];
+  matchCount: number;
+  canUndo: boolean;
+  /** Changes whenever anything the deck shows could have (spec section 5). */
+  fingerprint: string;
+  /**
+   * Set only when you have nothing left to answer: the nicknames of others
+   * who still have movies to answer. Empty means nobody does: the filtered
+   * pool is used up.
+   */
+  waitingOn: string[] | null;
+  /**
+   * The card the browser said was on screen, when it's now on someone's
+   * seen list: someone else ruled it out.
+   */
+  ruledOut: number | null;
+}
+
+/** The poll's reply (see #lib/watch-session-updates.ts). */
+export type PollReply =
+  | { status: "unchanged" }
+  | { status: "changed"; state: DeckState }
+  // The session ended, or you're no longer in it: the page reloads.
+  | { status: "ended" };
