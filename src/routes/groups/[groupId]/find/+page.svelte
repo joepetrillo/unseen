@@ -3,38 +3,19 @@
   import { resolve } from "$app/paths";
 
   import { ActionForm } from "#lib/action-form.svelte.ts";
+  import FilterFields, { CHIP } from "#lib/components/FilterFields.svelte";
   import Page from "#lib/components/Page.svelte";
   import { Button } from "#lib/components/ui/button/index.ts";
   import * as Card from "#lib/components/ui/card/index.ts";
   import * as Field from "#lib/components/ui/field/index.ts";
-  import { Input } from "#lib/components/ui/input/index.ts";
-  import { NativeSelect } from "#lib/components/ui/native-select/index.ts";
-  import {
-    formatRuntime,
-    NO_FILTERS,
-    RUNTIME_CHOICES,
-    YEAR_MAX,
-    YEAR_MIN,
-  } from "#lib/watch-fields.ts";
+  import { NO_FILTERS } from "#lib/watch-fields.ts";
 
   import type { PageProps } from "./$types";
 
   let { data }: PageProps = $props();
 
-  // Change filters starts from the current session's filters. Writable
-  // deriveds: the fields can be edited, and reset if the page data changes
-  // (another group, or another session to replace).
-  let initial = $derived(data.replacing?.filters ?? NO_FILTERS);
-  let runtime = $derived(
-    initial.maxRuntime === null ? "" : String(initial.maxRuntime)
-  );
-  let minYear = $derived(initial.minYear);
-  let maxYear = $derived(initial.maxYear);
-  let genreIds = $derived([...initial.genreIds]);
+  // Starting over keeps the current session's people ticked.
   let invitedUserIds = $derived([...data.invited]);
-  // Checkboxes styled as chips (genres and people).
-  const chip =
-    "cursor-pointer rounded-4xl border px-4 py-2 text-sm font-medium transition-colors select-none has-checked:border-primary has-checked:bg-primary has-checked:text-primary-foreground has-focus-visible:ring-[3px] has-focus-visible:ring-ring/50";
   // The browser names the new session, so a retried start lands on it.
   const start = new ActionForm({
     newIds: ["watchSessionId"],
@@ -110,8 +91,6 @@
     <form method="POST" action="?/start" use:enhance={start.submit}>
       <input type="hidden" name="replace" value={data.replacing?.id ?? ""} />
 
-      <!-- All optional: an untouched form starts with no filters. The
-           inputs and selected genres show what's on. -->
       <Field.Group>
         {#if data.members.length > 0}
           <Field.Set>
@@ -123,7 +102,7 @@
             </Field.Description>
             <div class="flex flex-wrap gap-2">
               {#each data.members as member (member.userId)}
-                <label class={chip}>
+                <label class={CHIP}>
                   <input
                     class="sr-only"
                     type="checkbox"
@@ -138,68 +117,10 @@
           </Field.Set>
         {/if}
 
-        <Field.Field>
-          <Field.Label for="runtime">Length</Field.Label>
-          <NativeSelect
-            id="runtime"
-            class="w-full"
-            name="maxRuntime"
-            bind:value={runtime}
-          >
-            <option value="">Any length</option>
-            {#each RUNTIME_CHOICES as minutes (minutes)}
-              <option value={String(minutes)}>
-                Up to {formatRuntime(minutes)}
-              </option>
-            {/each}
-          </NativeSelect>
-        </Field.Field>
-
-        <Field.Set>
-          <Field.Legend variant="label">Release year</Field.Legend>
-          <div class="grid grid-cols-2 gap-3">
-            <Input
-              type="number"
-              inputmode="numeric"
-              name="minYear"
-              min={YEAR_MIN}
-              max={YEAR_MAX}
-              placeholder="From"
-              aria-label="From year"
-              bind:value={minYear}
-            />
-            <Input
-              type="number"
-              inputmode="numeric"
-              name="maxYear"
-              min={YEAR_MIN}
-              max={YEAR_MAX}
-              placeholder="To"
-              aria-label="To year"
-              bind:value={maxYear}
-            />
-          </div>
-        </Field.Set>
-
-        <Field.Set>
-          <Field.Legend variant="label">Genres</Field.Legend>
-          <Field.Description>Pick any; none means all.</Field.Description>
-          <!-- Each ticked box sends genreIds. -->
-          <div class="flex flex-wrap gap-2">
-            {#each data.genres as genre (genre.id)}
-              <label class={chip}>
-                <input
-                  class="sr-only"
-                  type="checkbox"
-                  name="genreIds"
-                  value={genre.id}
-                  bind:group={genreIds}
-                />
-                {genre.name}
-              </label>
-            {/each}
-          </div>
-        </Field.Set>
+        <FilterFields
+          genres={data.genres}
+          initial={data.replacing?.filters ?? NO_FILTERS}
+        />
       </Field.Group>
 
       {#if data.replacing !== null}

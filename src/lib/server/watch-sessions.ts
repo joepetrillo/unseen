@@ -41,11 +41,12 @@ import {
   watchSessions,
 } from "#lib/server/db/schema.ts";
 import { confirmSeen, withdrawSeen } from "#lib/server/seen-list.ts";
-import type {
-  DeckState,
-  MovieCard,
-  PollReply,
-  WatchFilters,
+import {
+  type DeckState,
+  describeFilters,
+  type MovieCard,
+  type PollReply,
+  type WatchFilters,
 } from "#lib/watch-fields.ts";
 
 // The only module that changes watch sessions, their participants, answers,
@@ -289,6 +290,35 @@ export function joinWatchSession(
   });
 }
 
+/**
+ * Host only: Change filters. The session, its people, and its answers stay,
+ * so its matches do too (they come from answers, never from filters); only
+ * the movies dealt from now on change. Cards already on screen stay.
+ */
+export function changeWatchSessionFilters(
+  db: Db,
+  change: Change & { watchSessionId: string; filters: WatchFilters }
+): Promise<WatchSessionOutcome> {
+  const { actionId, userId, watchSessionId, filters } = change;
+  const action: Action = {
+    id: actionId,
+    userId,
+    type: "watch_session_filters",
+    watchSessionId,
+    ...filters,
+  };
+  return runWatchAction(db, action, async (tx) => {
+    const session = await lockSessionForMember(tx, watchSessionId, userId);
+    if (session.closedAt !== null) throw new Refusal("session_closed");
+    await requireHost(tx, watchSessionId, userId);
+    await tx
+      .update(watchSessions)
+      .set(filters)
+      .where(eq(watchSessions.id, watchSessionId));
+    await notifyWatchSessionChanged(tx, watchSessionId);
+  });
+}
+
 /** Host only. Records the session's current matches as past matches. */
 export function endWatchSession(
   db: Db,
@@ -312,7 +342,8 @@ export function endWatchSession(
 /**
  * Records an answer. Seen also puts the movie on the user's seen list (and
  * replaces an earlier Not seen: "Actually, I've seen this"). A Not seen on a
- * movie someone in the session has seen is ignored: it's already out.
+ * movie someone has seen is still recorded: it can't match, but Undo takes
+ * it back like any other answer, and it counts if they withdraw their Seen.
  */
 export function answerMovie(
   db: Db,
@@ -338,7 +369,7 @@ export function answerMovie(
     if (answer === "seen") {
       await setAnswer(tx, participationId, movieId, "seen");
       await confirmSeen(tx, { actionId, userId, movieId });
-    } else if (!(await seenBySomeone(tx, watchSessionId, movieId))) {
+    } else {
       await setAnswer(tx, participationId, movieId, "not_seen");
     }
     await notifyWatchSessionChanged(tx, watchSessionId);
@@ -780,11 +811,41 @@ const SNAPSHOT = {
   accessMode: "read only",
 } as const;
 
+/** "Under 2 hours · Comedy, Drama · 1990–2009", for the session's header. */
+export async function describeSessionFilters(
+  db: Db | Transaction,
+  filters: WatchFilters
+): Promise<string> {
+  const names =
+    filters.genreIds.length === 0
+      ? []
+      : await db
+          .select({ id: genres.id, name: genres.name })
+          .from(genres)
+          .where(inArray(genres.id, filters.genreIds));
+  return describeFilters(
+    filters,
+    new Map(names.map((genre) => [genre.id, genre.name]))
+  );
+}
+
 async function deckStateIn(
   tx: Transaction,
   { watchSessionId, participationId, exclude, visible }: DeckRequest
 ): Promise<DeckState> {
   const fingerprint = await fingerprintIn(tx, watchSessionId);
+  // The host can change them mid-session, so they come with every state.
+  const [session] = await tx
+    .select({
+      maxRuntime: watchSessions.maxRuntime,
+      minYear: watchSessions.minYear,
+      maxYear: watchSessions.maxYear,
+      genreIds: watchSessions.genreIds,
+    })
+    .from(watchSessions)
+    .where(eq(watchSessions.id, watchSessionId));
+  const filters =
+    session === undefined ? "" : await describeSessionFilters(tx, session);
   const cards = await dealCards(tx, {
     watchSessionId,
     participationId,
@@ -797,11 +858,11 @@ async function deckStateIn(
       ? visible
       : null;
 
-  // Nothing left for you (no card on screen, or it was just ruled out): who
-  // still has movies to answer? Their deck is the same pool minus their own
-  // answers, so ask it for one card each.
+  // Nothing left for you to answer: who still has movies to answer? Their
+  // deck is the same pool minus their own answers, so ask it for one card
+  // each.
   let waitingOn: string[] | null = null;
-  if (cards.length === 0 && (visible === null || ruledOut !== null)) {
+  if (cards.length === 0 && visible === null) {
     waitingOn = [];
     for (const person of await listParticipants(tx, watchSessionId)) {
       if (!person.joined || person.participationId === participationId) {
@@ -822,6 +883,7 @@ async function deckStateIn(
     fingerprint,
     waitingOn,
     ruledOut,
+    filters,
   };
 }
 

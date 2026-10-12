@@ -140,14 +140,17 @@ test("two people see each other's answers and reach a shared match", async ({
   await expect(sam.getByRole("link", { name: "Matches 1" })).toBeVisible();
   await expect(alex.getByRole("link", { name: "Matches 1" })).toBeVisible(LIVE);
 
-  // Sam is looking at movie 2 when Alex says Seen to it: it's skipped on
-  // Sam's screen with a note.
+  // Sam is looking at movie 2 when Alex says Seen to it: the card stays on
+  // Sam's screen (it never moves under a tap), with a note.
   await expect(card(sam)).toHaveText(title(1));
   await answer(alex, "Seen");
   await expect(
-    sam.getByText(`Someone has seen ${title(1)}, so it's out.`)
+    sam.getByText("Someone has seen this one, so it can't be a match.")
   ).toBeVisible(LIVE);
+  await expect(card(sam)).toHaveText(title(1));
+  await answer(sam, "Not seen");
   await expect(card(sam)).toHaveText(title(2));
+  await expect(sam.getByText("so it can't be a match")).toBeHidden();
 
   // Alex finishes first and waits on Sam, by name.
   await answer(alex, "Not seen");
@@ -190,25 +193,43 @@ test("doesn't poll while an answer is being saved", async ({ browser }) => {
   await expect.poll(() => polls, LIVE).toBeGreaterThan(0);
 });
 
-test("the host's Change filters brings guests along", async ({ browser }) => {
+test("the host's Change filters keeps the session and its matches", async ({
+  browser,
+}) => {
   const { alex, sam } = await startTogether(browser);
+  const sessionUrl = alex.url();
+  await answer(alex, "Not seen");
+  await answer(sam, "Not seen");
+  await expect(alex.getByRole("link", { name: "Matches 1" })).toBeVisible(LIVE);
+  await expect(card(sam)).toHaveText(title(1));
 
-  // Guests can't change filters; the host can.
+  // Guests can't change filters; the host can, in place.
   await expect(sam.getByRole("link", { name: "Change filters" })).toHaveCount(
     0
   );
   await alex.getByRole("link", { name: "Change filters" }).click();
-  await alex.getByRole("button", { name: "Start" }).click();
-  await expect(card(alex)).toHaveText(title(0));
-
-  // Sam's deck notices the old session ended and offers the new one, which
-  // Sam is already in.
-  await expect(alex).toHaveURL(/\/sessions\/[0-9a-f-]+$/);
+  await expect(alex.getByRole("heading", { level: 1 })).toHaveText(
+    "Change filters"
+  );
+  // The test movies are from 2001: nothing fits from 2002 on.
+  await alex.getByLabel("From year").fill("2002");
+  await alex.getByRole("button", { name: "Save filters" }).click();
+  await expect(alex).toHaveURL(sessionUrl);
   await expect(
-    sam.getByRole("heading", { name: "This session has ended" })
-  ).toBeVisible(LIVE);
-  await sam.getByRole("link", { name: "Go to the current session" }).click();
-  await expect(card(sam)).toHaveText(title(0));
+    alex.getByText("That's every movie that fits these filters.")
+  ).toBeVisible();
+  await expect(alex.getByRole("link", { name: "Matches 1" })).toBeVisible();
+
+  // Sam stays in the same session: the card on screen stays, the filters
+  // shown update, and the match is still there.
+  await expect(sam.getByText("2002 or later")).toBeVisible(LIVE);
+  await expect(card(sam)).toHaveText(title(1));
+  await answer(sam, "Not seen");
+  await expect(
+    sam.getByText("That's every movie that fits these filters.")
+  ).toBeVisible();
+  await expect(sam).toHaveURL(sessionUrl);
+  await expect(sam.getByRole("link", { name: "Matches 1" })).toBeVisible();
 });
 
 test("signing out elsewhere takes the deck to sign-in", async ({ browser }) => {

@@ -146,6 +146,8 @@ export const deckStateSchema = z.object({
    * seen list: someone else ruled it out.
    */
   ruledOut: z.int().nullable(),
+  /** The session's filters, described (the host can change them). */
+  filters: z.string(),
 });
 export type DeckState = z.infer<typeof deckStateSchema>;
 

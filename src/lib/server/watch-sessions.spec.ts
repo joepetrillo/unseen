@@ -15,6 +15,7 @@ import { connectTestDb, createFixtures } from "#lib/server/testing/db.ts";
 import {
   answerMovie,
   canUndo,
+  changeWatchSessionFilters,
   dealCards,
   endWatchSession,
   getActiveWatchSessionId,
@@ -436,7 +437,7 @@ describe("answers and matches", () => {
     );
   });
 
-  it("ignores a late Not seen on a movie someone has seen", async () => {
+  it("records a late Not seen on a movie someone has seen, without a match", async () => {
     const m = await movie(world);
     const session = await start(world);
     const guest = await addGuest(session);
@@ -446,7 +447,10 @@ describe("answers and matches", () => {
     const answers = await db.query.watchSessionAnswers.findMany({
       where: { participationId: session.participationId },
     });
-    expect(answers).toEqual([]);
+    expect(answers.map((row) => row.movieId)).toEqual([m]);
+    expect(await matchIds(session)).toEqual([]);
+    // Undo takes back that answer, not the one before it.
+    expect(await undo(world, session)).toMatchObject({ movieId: m });
   });
 
   it("bumps the session's revision on every change", async () => {
@@ -715,6 +719,96 @@ describe("starting and ending", () => {
     expect(await answer(world, crossed, m, "not_seen")).toBe("not_found");
     expect((await undo(world, crossed)).outcome).toBe("not_found");
     expect(await matchIds(mine)).toEqual([]);
+  });
+});
+
+describe("changing filters", () => {
+  const change = (
+    userId: string,
+    session: Session,
+    filters: WatchFilters,
+    actionId = id()
+  ) =>
+    changeWatchSessionFilters(db, {
+      actionId,
+      userId,
+      watchSessionId: session.id,
+      filters,
+    });
+
+  it("keeps the session and its matches, and deals by the new filters", async () => {
+    const first = await movie(world);
+    const otherGenre = await fixtures.genre();
+    const second = await movie(world, { genreIds: [otherGenre] });
+    const session = await start(world);
+    await answer(world, session, first, "not_seen");
+    expect(await deal(session)).toEqual([]);
+
+    const filters = { ...NO_FILTERS, genreIds: [otherGenre] };
+    expect(await change(world.userId, session, filters)).toBe("applied");
+
+    expect(await getActiveWatchSessionId(db, world.groupId)).toBe(session.id);
+    expect(await deal(session)).toEqual([second]);
+    // Matches come from answers, never from filters.
+    expect(await matchIds(session)).toEqual([first]);
+    const state = await readDeckState(db, {
+      watchSessionId: session.id,
+      participationId: session.participationId,
+      exclude: [],
+      visible: null,
+    });
+    expect(state.matchCount).toBe(1);
+    expect(state.filters).toContain("Any length");
+    // Nothing recorded as past matches: the session didn't close.
+    const past = await db.query.groupPastMatches.findMany({
+      where: { groupId: world.groupId },
+    });
+    expect(past).toEqual([]);
+  });
+
+  it("lets only the host change filters, while the session is open", async () => {
+    const session = await start(world);
+    const guest = await addGuest(session);
+    await createGroupMembership({ ...world, userId: guest.userId });
+    const filters = { ...NO_FILTERS, genreIds: [world.genreId] };
+
+    expect(await change(guest.userId, session, filters)).toBe("not_host");
+    expect(await change((await newWorld()).userId, session, filters)).toBe(
+      "not_found"
+    );
+    await endWatchSession(db, {
+      actionId: id(),
+      userId: world.userId,
+      watchSessionId: session.id,
+    });
+    expect(await change(world.userId, session, filters)).toBe("session_closed");
+  });
+
+  it("treats a retried change as the same; other filters conflict", async () => {
+    const session = await start(world);
+    const actionId = id();
+    const filters = {
+      ...NO_FILTERS,
+      maxRuntime: 120,
+      genreIds: [world.genreId],
+    };
+    const before = await revision(session.id);
+
+    expect(await change(world.userId, session, filters, actionId)).toBe(
+      "applied"
+    );
+    expect(await change(world.userId, session, filters, actionId)).toBe(
+      "duplicate"
+    );
+    expect(
+      await change(
+        world.userId,
+        session,
+        { ...filters, maxRuntime: 90 },
+        actionId
+      )
+    ).toBe("conflict");
+    expect(await revision(session.id)).toBe((before ?? 0) + 1);
   });
 });
 
@@ -1018,8 +1112,8 @@ describe("together: polling and simultaneous answers", () => {
     await answer(guest, guestSession, m, "seen");
     const state = await read(host, m);
     expect(state.ruledOut).toBe(m);
-    // You were looking at the last card: now there's nothing left.
-    expect(state.waitingOn).toEqual([]);
+    // The card stays on your screen until you answer it.
+    expect(state.waitingOn).toBe(null);
   });
 
   it("counts a match once when both answer Not seen at the same moment", async () => {

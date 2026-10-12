@@ -13,6 +13,7 @@ import {
   answerMovie,
   canUndo,
   countMatches,
+  describeSessionFilters,
   endWatchSession,
   getActiveWatchSessionId,
   getCard,
@@ -23,7 +24,6 @@ import {
   readDeckState,
   undoLastAnswer,
 } from "#lib/server/watch-sessions.ts";
-import { describeFilters } from "#lib/watch-fields.ts";
 
 import type { Actions, PageServerLoad } from "./$types";
 
@@ -36,19 +36,12 @@ export const load: PageServerLoad = async ({ params, locals }) => {
   // Same answer for "no such session" and "not your group".
   if (session === null) error(404, "Session not found.");
 
-  const genres = await db.query.genres.findMany({
-    where: { id: { in: session.genreIds } },
-  });
-  const summary = describeFilters(
-    session,
-    new Map(genres.map((genre) => [genre.id, genre.name]))
-  );
   const base = {
     session: {
       id: session.id,
       groupId: session.groupId,
       groupName: session.groupName,
-      filters: summary,
+      filters: await describeSessionFilters(db, session),
       isHost: session.participation?.role === "host",
     },
   };

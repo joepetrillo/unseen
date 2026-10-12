@@ -51,7 +51,8 @@ const UNDO_FAILED = "Couldn't undo. Check your connection and try again.";
  * - Between saves, a poll (`connect`) brings in other people's changes the
  *   same way. Polls pause while a save or undo is on its way, and a poll
  *   that started before one is ignored, so it can't undo what you just did.
- *   If someone else rules out the card on screen, it's skipped with a note.
+ *   If someone else rules out the card on screen, it stays (a card that
+ *   moved as you tapped would take your answer) and a note says why.
  *
  * A class with `$state` fields, in a .svelte.ts module so runes work: the
  * page reads `deck.cards` and updates when it changes, with no store.
@@ -79,10 +80,12 @@ export class Deck {
    * Empty means nobody does (the filters are used up); null, not known yet.
    */
   waitingOn = $state.raw<string[] | null>(null);
-  /** A card someone else ruled out while it was on your screen. */
-  skipped = $state<string | null>(null);
+  // A card someone has seen since it was dealt to you: it can't be a match.
+  #ruledOutId = $state<number | null>(null);
   /** The last poll didn't reach the server. */
   offline = $state(false);
+  /** The session's filters, described; the host can change them. */
+  filters = $state("");
 
   // What the server last said about undo; unsent answers add to it.
   #serverCanUndo = $state(false);
@@ -101,6 +104,7 @@ export class Deck {
     this.matchCount = state.matchCount;
     this.#serverCanUndo = state.canUndo;
     this.waitingOn = state.waitingOn;
+    this.filters = state.filters;
     this.#fingerprint = state.fingerprint;
   }
 
@@ -134,6 +138,11 @@ export class Deck {
     return this.cards[0];
   }
 
+  /** Someone has seen the card on screen since it was dealt. */
+  get ruledOut(): boolean {
+    return this.card?.id === this.#ruledOutId;
+  }
+
   get canUndo(): boolean {
     return this.#serverCanUndo || this.pending > 0;
   }
@@ -147,7 +156,6 @@ export class Deck {
     const card = this.cards[0];
     if (card === undefined || this.undoing || this.refused !== null) return;
     this.lastAnswer = answer;
-    this.skipped = null;
     this.cards = this.cards.slice(1);
     this.#saves.push({ actionId: crypto.randomUUID(), card, answer });
     this.pending = this.#saves.length;
@@ -283,23 +291,22 @@ export class Deck {
 
   // A save's or poll's reply: fresh cards replace the queue behind the
   // visible card, skipping anything answered since the request went out.
-  // The visible card stays, unless someone else has ruled it out.
+  // The visible card always stays.
   #apply(state: DeckState): void {
     const { cards, matchCount, canUndo, waitingOn, fingerprint } = state;
     this.#fingerprint = fingerprint;
     this.#updates?.saw(fingerprint);
     const answered = this.#saves.map((save) => save.card.id);
-    let visible = this.card;
-    // Only if it's still the card on screen: you may have moved on since.
-    if (state.ruledOut !== null && visible?.id === state.ruledOut) {
-      this.skipped = visible.title;
-      visible = undefined;
-    }
+    const visible = this.card;
+    // Kept by ID, so it shows only while that card is on screen (you may
+    // have moved on since the request went out).
+    if (state.ruledOut !== null) this.#ruledOutId = state.ruledOut;
     const fresh = cards.filter(
       (card) => !answered.includes(card.id) && card.id !== visible?.id
     );
     this.cards = visible === undefined ? fresh : [visible, ...fresh];
     this.waitingOn = waitingOn;
+    this.filters = state.filters;
     if (this.matchCount < REVIEW_PROMPT_AT && matchCount >= REVIEW_PROMPT_AT) {
       this.reviewPrompt = true;
     }

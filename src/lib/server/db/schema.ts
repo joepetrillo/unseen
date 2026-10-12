@@ -425,6 +425,7 @@ export const actionType = pgEnum("action_type", [
   "watch_session_start",
   "watch_session_end",
   "watch_session_join",
+  "watch_session_filters",
   "watch_answer_seen",
   "watch_answer_not_seen",
   "watch_answer_undo",

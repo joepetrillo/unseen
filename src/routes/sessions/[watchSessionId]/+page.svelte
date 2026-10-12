@@ -52,8 +52,8 @@
     })
   );
   let changeFiltersHref = $derived(
-    resolve(`/groups/[groupId]/find?replace=${data.session.id}`, {
-      groupId: data.session.groupId,
+    resolve("/sessions/[watchSessionId]/filters", {
+      watchSessionId: data.session.id,
     })
   );
 
@@ -132,8 +132,9 @@
         <Badge>{deck.matchCount}</Badge>
       </Button>
     </header>
+    <!-- From the deck: the host can change filters mid-session. -->
     <p class="mt-1 truncate text-sm text-muted-foreground">
-      {data.session.filters}
+      {deck.filters}
     </p>
 
     <main class="flex min-h-0 flex-1 flex-col items-center justify-center py-4">
@@ -211,7 +212,7 @@
           </p>
           <p class="mt-2 text-muted-foreground">
             {data.session.isHost
-              ? "Look over the matches, or change the filters for more."
+              ? "Look over the matches, or change the filters for more. The matches stay."
               : "Look over the matches. The host can change the filters for more."}
           </p>
           <div class="mt-6 flex flex-col gap-3">
@@ -253,8 +254,8 @@
             Saving…
           {:else if deck.offline}
             Can't reach Vunu. Trying again…
-          {:else if deck.skipped !== null}
-            Someone has seen {deck.skipped}, so it's out.
+          {:else if deck.ruledOut}
+            Someone has seen this one, so it can't be a match.
           {/if}
         </p>
         {#if deck.error !== null}
@@ -289,7 +290,7 @@
         {/each}
       </div>
 
-      <!-- Host only: changing filters replaces the session for everyone. -->
+      <!-- Host only: new filters change what everyone is dealt next. -->
       {#if data.session.isHost}
         <div class="flex items-center justify-center gap-2 text-sm">
           <Button variant="link" size="sm" href={changeFiltersHref}>
@@ -338,7 +339,7 @@
     {:else}
       <p class="text-muted-foreground">It ended without any matches.</p>
     {/if}
-    <!-- The host may have changed filters, which starts a new session. -->
+    <!-- The host may have started a new one ("Start a new one"). -->
     {#if data.current !== null}
       <Button
         class="mt-8 w-full"

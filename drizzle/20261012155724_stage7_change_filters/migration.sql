@@ -1,0 +1,1 @@
+ALTER TYPE "action_type" ADD VALUE 'watch_session_filters' BEFORE 'watch_answer_seen';

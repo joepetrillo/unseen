@@ -30,6 +30,14 @@ interface InputsByType {
     invitedUserIds: string[];
   };
   watch_session_join: { watchSessionId: string; participationId: string };
+  watch_session_filters: {
+    watchSessionId: string;
+    maxRuntime: number | null;
+    minYear: number | null;
+    maxYear: number | null;
+    /** Sorted and without duplicates, so a retry compares equal. */
+    genreIds: number[];
+  };
   watch_session_end: { watchSessionId: string };
   watch_answer_seen: { participationId: string; movieId: number };
   watch_answer_not_seen: { participationId: string; movieId: number };
