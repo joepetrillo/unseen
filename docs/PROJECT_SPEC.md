@@ -29,9 +29,9 @@ Movies only. US region only (release dates, age ratings). TV shows are a possibl
 ### Sessions
 
 - **One active session per group.** Tapping **Find a movie** while one is active offers **Resume** or **Start fresh** (which closes the old one).
-- Any group member can start one. The person who starts it is the **host** and picks **who's watching tonight** (a subset of the group). Solo sessions are allowed.
-- Starting takes one tap: filters are optional and shown open on the start screen; untouched, it starts with none. See Filters. If someone else in the group starts a session first, a later Start lands on "A session is already going"; only that session's host can continue or replace it (joining other people's sessions is stages 7–8).
-- **Changing filters starts a new session.** **Change filters** opens the start screen with the current filters prefilled; starting there closes the old session and opens the new one in one step (the start names the session it replaces, so a stale screen can't end a newer one). Backing out changes nothing (decided 2026-10-11, refined 2026-10-12). The same mechanism serves stage 8's Start fresh.
+- Any group member can start one. The person who starts it is the **host** and picks **who's watching tonight** (a subset of the group) as chips on the start screen, all ticked by default (decided 2026-10-12, stage 7). Solo sessions are allowed.
+- Starting takes one tap: filters are optional and shown open on the start screen; untouched, it starts with none. See Filters. If someone else in the group starts a session first, a later Start lands on "A session is already going"; its host can continue or replace it, people in it or invited to it get a link to it, and everyone else is told the group has one going.
+- **Changing filters starts a new session.** **Change filters** (host only) opens the start screen with the current filters and people prefilled; starting there closes the old session and opens the new one in one step (the start names the session it replaces, so a stale screen can't end a newer one). People who had joined the old session are in the new one without accepting again; others are invited. Guests' decks notice the old session ended and lead to the new one. Backing out changes nothing (decided 2026-10-11, refined 2026-10-12). The same mechanism serves stage 8's Start fresh.
 - Sessions **auto-close after 24 hours** without activity. The timer resets only on successful user changes (answers, undo, participant changes), never on reads, polling, or duplicate retries. The host can close one anytime. Closed sessions reject all changes.
 
 ### Answering
@@ -41,21 +41,20 @@ Movies only. US region only (release dates, age ratings). TV shows are a possibl
    - **Seen** adds the movie to that user's seen list and eliminates it from the session. Others see this on their next refresh (a few seconds).
    - A Seen answer on a movie someone else already eliminated **still updates your seen list**. A late Not seen on an eliminated movie is ignored.
 3. A movie is a **match** when every current participant has answered **Not seen** and none of them has it in their seen list. Matches are derived from answers only; filters and catalog data decide only what gets dealt next, so a catalog sync can't break an existing shortlist.
-4. At **5 matches** the app prompts the group to review the shortlist. Not a hard stop: the first match is viewable as soon as it exists, and people can keep going ("Find more").
+4. At **5 matches** the app prompts the group to review the shortlist: each person sees it when the shared count reaches 5 during their visit, through their own answer or a poll (decided 2026-10-12; once per group would need stored state). Not a hard stop: the first match is viewable as soon as it exists, and people can keep going ("Find more").
 5. People can answer at different times and resume where they left off.
 
 ### Session states (show the right one)
 
 Each is a distinct message and UI state:
 
-- **You're caught up:** you've answered everything available; others still have work.
-- **Waiting for others:** candidates exist that only need other participants' answers. Show who hasn't answered. Never suggest loosening filters here.
-- **No eligible movies:** the filtered pool is truly exhausted. Suggest which filter to loosen, based on actual remaining counts.
-- **Something failed:** a request error. Distinguish "saving…" from "failed, retry".
+- **You're caught up, waiting for others:** you've answered everything available; others still have movies to answer. Shown as one screen ("You're caught up. Waiting for Sam and Alex to answer."), by nickname (decided 2026-10-12, stage 7): every participant draws from the same eligible pool, so when you have nothing left, the remaining candidates are exactly the ones waiting on others. Derived by asking each other participant's deck for one card. Never suggest loosening filters here.
+- **No eligible movies:** you and everyone else have answered everything: the filtered pool is truly exhausted. Suggesting which filter to loosen from actual remaining counts is deferred to stage 9, when the full catalog makes those counts meaningful (decided 2026-10-12).
+- **Something failed:** a request error. Distinguish "saving…" from "failed, retry" (a failed save), and a failed poll ("Can't reach Vunu. Trying again…", retried by itself).
 
 ### Participants
 
-- Joining a running session requires the person to **accept the invite**. That's the only confirmation; it has nothing to do with answering movies.
+- Joining a running session requires the person to **accept the invite**. That's the only confirmation; it has nothing to do with answering movies. Built in stage 7 (decided 2026-10-12): the people the host ticks get invited participations (`joined_at` null) and see "Join the session" on the group page, then "{host} invited you" with the filters, who's in, and **Join**. Until they accept they don't count: their seen list doesn't filter the deck and matches don't wait for them, so someone who never opens the app can't stall the session. Stage 8 adds the remaining rules (removal, rejoining).
 - The host can **remove** a participant. Removing someone **deletes their answers in that session**, and matches recalculate from the remaining participants.
 - Each join is a separate **participation** (its own ID). Rejoining starts fresh, and requests tied to an earlier participation are rejected.
 - A session always has at least one participant. If the host leaves the session or group, the longest-standing participant becomes host; if nobody is left, the session closes. Leaving a group removes the person from that group's active session.
@@ -159,12 +158,12 @@ Other rules:
 - **Change detection with a fingerprint:** the poll compares a small fingerprint built from the session's `revision` plus each active participant's `seen_version`. A seen-list change bumps only that user's counter, and every session they're in notices automatically. No cross-session writes or locking.
 - When the fingerprint changed, the server returns full state and the new fingerprint from **one consistent read**.
 - The client applies only the response to its **latest** request. Polls never overlap.
-- **Coordinate polling with saves:** while a save is in flight, pause polling and discard any refresh response that started before the save, so it can't overwrite the save's result. Refresh once the save completes. Poll every 2–3 seconds while a session screen is open and visible; pause when backgrounded; back off when nothing changes; refresh immediately on focus/reconnect.
-- An unchanged fingerprint gets a tiny "no change" response.
+- **Coordinate polling with saves:** while a save (or undo) is in flight, pause polling and discard any refresh response that started before the save, so it can't overwrite the save's result. Refresh once the save completes. **Numbers (decided 2026-10-12, stage 7):** every 2.5 s while the deck is open and visible, multiplying by 1.5 per unchanged reply up to 10 s, back to 2.5 s after any change or your own save; paused in the background; immediately on focus, visibility, or reconnect; a failed poll doubles the wait (up to 10 s) and shows "Can't reach Vunu".
+- An unchanged fingerprint gets a tiny "no change" response. The fingerprint is a 16-character SHA-256 digest of the revision and each active participant's `participation:seen_version`; the full state is the next cards (skipping the cards on screen), a match **count** (not the list; decided 2026-10-12), whether you can undo, who you're waiting on, and whether the card on your screen was ruled out. Reads use one repeatable-read, read-only transaction, so the fingerprint describes exactly the state returned with it.
 - A user's own answer response returns fresh state; polling only catches other people's changes.
 - **Swappable boundaries:**
-  - Server: `notifyWatchSessionChanged(watchSessionId)`, called on watch session changes (bumps revision). Seen-list changes bump `seen_version` in the seen-list module.
-  - Client: `subscribeToWatchSession(watchSessionId, onChange)`, polls and reloads only when the fingerprint changed.
+  - Server: `notifyWatchSessionChanged(watchSessionId)`, called on watch session changes (bumps revision). Seen-list changes bump `seen_version` in the seen-list module. The poll is `GET /sessions/<id>/poll` (`pollWatchSession` in `watch-sessions.ts`); answers reply with the same state (`readDeckState`).
+  - Client: `subscribeToWatchSession(watchSessionId, { fingerprint, query, onChange })` in `#lib/watch-session-updates.ts`, which reports only changes; `hold()` pauses it for a save and returns the release, and `saw(fingerprint)` records a save reply's state. The deck (`deck.svelte.ts`) is its only user.
   - Switching to a real-time service (Ably/Pusher/PartyKit, or self-hosted WebSockets + Redis pub/sub) means rewriting only these boundaries; the fingerprint logic stays as the safety net.
 
 ## 5b. Database connections
@@ -213,8 +212,9 @@ Not needed for v1: WebSockets or real-time services, Redis, job queues (BullMQ),
 
 ## 7. Open details to decide together
 
-- Exact polling intervals and backoff
 - How auto-close runs (checked on read vs. a scheduled job)
+
+Resolved in stage 7 (2026-10-12): polling intervals and backoff (section 5).
 
 Resolved in stage 6 (2026-10-11): minimum vote count (200).
 
@@ -318,6 +318,18 @@ Entries below are dated implementation history. The current status is summarized
     - `SeenButton.svelte` still keeps its own action-ID logic (only its markup changed).
     - Matches are counted by listing them on every answer; fine for now, revisit with stage 7's polling.
     - Automated Preview check (2026-10-12) on the branch's Preview deployment, with its copy of the Production catalog and a throwaway `delivered+…@resend.dev` account: sign-in, create a group, start with no filters (deck in vote order with posters), Seen, Not seen, Undo (the movie came back), two matches, where-to-watch link, "Actually, I've seen this", Change filters (up to 2 h, Comedy) replacing the session, and End session. The owner then checked it on a phone.
+
+- **Stage 7 — built (2026-10-12); Preview and phone check pending.** Started with the vitest / `@vitest/browser-playwright` 5.0.4 patch pair; Kit, the adapter, and Drizzle were current. Decisions with the owner (2026-10-12): invited people accept before they count; polling numbers; waiting-for-others names nicknames; filter-loosening hints wait for stage 9; the five-match prompt stays per visit; Change filters is host only; the deck carries a match count. All recorded in sections 1 and 5.
+  - **Schema:** one additive migration: action type `watch_session_join` and `actions.invited_user_ids` (sorted, so a retried start with the same people in any order is a duplicate; different people is a conflict).
+  - **Server (`watch-sessions.ts`):** a start invites the ticked members (only current members; the group row lock it already holds keeps membership still), and a replacing start keeps people who had joined. `joinWatchSession` accepts. `listParticipants`, `countMatches`, `readDeckState` (one repeatable-read snapshot with the fingerprint), and `pollWatchSession` (`GET /sessions/<id>/poll`: unchanged, the deck's state, or ended). Deck state names who you're waiting on once you have nothing left, and flags the card on your screen when someone else has seen it.
+  - **Pages:** the start screen's "Who's watching" chips; the group page offers Continue, Join, or says others have a session going; the session page's "{host} invited you" view with Join; an ended session links to the group's current one when you're in it (guests follow Change filters).
+  - **Client:** `#lib/watch-session-updates.ts` (`subscribeToWatchSession`) polls one request at a time, backs off, pauses in the background and during saves and undo, and ignores replies to polls that started before a save. The deck page starts it with an `$effect` (an outside process with a cleanup). The deck skips a ruled-out card with a note and shows the caught-up / waiting, used-up, and can't-reach states.
+  - **Tests:** 8 poll-loop unit tests with fake timers (fingerprint sent, backoff, no overlap, paused during saves, stale replies ignored even when the save finished first, failures, ended), 15 database tests (invitations, carry-over on Change filters, fingerprint changes from answers and from seen lists edited elsewhere, poll replies, waiting and ruled-out states, simultaneous Not seen / Not seen and Seen / Not seen, no lost revision bumps), and 3 two-browser e2e journeys (a shared match with live updates, the skip note, and waiting by name; no polls while a save is out; guests following Change filters). Totals: 183 Vitest tests, 26 Playwright journeys.
+  - Follow-ups:
+    - Invitees find out from the group page; nothing notifies them, and group pages still don't update live.
+    - Members who weren't invited can't join a running session; stage 8 (session invites, removal, rejoin) covers it.
+    - Waiting-for-others runs one small deck query per other participant, only when you have nothing left. Fine for small groups; revisit with the full catalog.
+    - The Vercel previews for the first pushes of this branch failed with `git_info_fail` before building (Vercel couldn't read the commit); later pushes built.
 
 - **Audit — implemented and reviewed (2026-10-03; [PR #1](https://github.com/joepetrillo/vunu/pull/1)).** Inspected the current application and retained its route/form-action, pooled TCP database, and idempotent mutation design. Added disposable test configuration/migrations, encrypted OTP storage and a restricted auth surface, hosted email safeguards, database connection recovery/timeout handling, stale-action URL protection, deliberate missing-movie responses, sign-in/sign-out failure recovery and focus management, and validated/transactional catalog import coverage. CI now exercises browser journeys. Exact findings, versions, checks, limitations, and separate rollout steps are in `docs/AUDIT.md`. Only `main` deploys now (`vercel.json`); PRs get CI only. The first encrypted-OTP deployment requires a fresh code afterward; codes issued by the preceding plaintext version are incompatible. This does not complete stage 4's live-site check or implement later stages. Follow-ups:
   - On the next Drizzle upgrade, recheck whether a failed transaction `BEGIN` still leaks its pool connection (`docs/AUDIT.md`, remaining question 3).
