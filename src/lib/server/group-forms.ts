@@ -1,45 +1,16 @@
 import { type ActionFailure, fail, redirect } from "@sveltejs/kit";
-import type { z } from "zod";
 
 import { inviteCodeSchema } from "#lib/group-fields.ts";
 import { db } from "#lib/server/db/index.ts";
+import { RELOAD } from "#lib/server/forms.ts";
 import { type GroupOutcome, previewInvite } from "#lib/server/groups.ts";
 import { requireUser } from "#lib/server/require-user.ts";
 
 // Shared by the group pages' form actions.
 
-const RELOAD = "Something went wrong. Reload the page and try again.";
-export const INACTIVE_CODE = "That's not an active invite code.";
+export { readForm } from "#lib/server/forms.ts";
 
-/**
- * The form's fields, validated, or a failure to return from the action.
- * Field errors (an empty nickname, say) carry the schema's own message.
- */
-export async function readForm<T extends z.ZodType>(
-  request: Request,
-  schema: T
-): Promise<
-  | { ok: true; data: z.output<T> }
-  | { ok: false; failure: ActionFailure<{ message: string }> }
-> {
-  // Malformed multipart bodies can fail before Zod sees any fields.
-  const fields = await request.formData().catch((error: unknown) => {
-    if (error instanceof TypeError) return null;
-    throw error;
-  });
-  const form = schema.safeParse(
-    fields === null ? null : Object.fromEntries(fields)
-  );
-  if (form.success) return { ok: true, data: form.data };
-  // A hidden field (an ID) failing means a bug or a tampered request, so
-  // only show messages written for people.
-  const issue = form.error.issues[0];
-  const message =
-    issue?.code === "too_small" || issue?.code === "too_big"
-      ? issue.message
-      : RELOAD;
-  return { ok: false, failure: fail(400, { message }) };
-}
+export const INACTIVE_CODE = "That's not an active invite code.";
 
 const refusals: Record<
   Exclude<GroupOutcome, "applied" | "duplicate">,

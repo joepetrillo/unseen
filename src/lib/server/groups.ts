@@ -65,10 +65,11 @@ class Refusal extends Error {
 async function runGroupAction(
   db: Db,
   action: Action,
-  apply: (tx: Transaction) => Promise<void>
+  apply: (tx: Transaction) => Promise<void>,
+  options?: Parameters<typeof runAction>[3]
 ): Promise<GroupOutcome> {
   try {
-    return await runAction(db, action, apply);
+    return await runAction(db, action, apply, options);
   } catch (error) {
     if (error instanceof Refusal) return error.reason;
     throw error;
@@ -130,25 +131,11 @@ export function createGroup(
  * still belong to that group. Already a member: nothing changes, and the
  * outcome is still `applied` (you're in the group).
  */
-export async function joinGroup(
+export function joinGroup(
   db: Db,
   change: GroupChange & { inviteCode: string; nickname: string }
 ): Promise<GroupOutcome> {
   const { actionId, userId, groupId, inviteCode, nickname } = change;
-  // A retry of a join that already went through (its response was lost)
-  // must reach runAction to be recognized, even at the lookup limit. An ID
-  // in the log is never a new guess: runAction answers it without looking
-  // at the code.
-  const logged = await db.query.actions.findFirst({
-    columns: { id: true },
-    where: { id: actionId },
-  });
-  // Counted even with the group's ID in hand: a removed member knows it and
-  // could otherwise guess at the new code without limit.
-  if (logged === undefined && !(await consumeInviteLookup(db, userId))) {
-    return "too_many_lookups";
-  }
-
   const action: Action = {
     id: actionId,
     userId,
@@ -156,30 +143,45 @@ export async function joinGroup(
     groupId,
     nickname,
   };
-  return runGroupAction(db, action, async (tx) => {
-    // A missing group and a wrong or reset code look the same to the joiner.
-    const [locked] = await tx
-      .select({ inviteCode: groups.inviteCode })
-      .from(groups)
-      .where(eq(groups.id, groupId))
-      .for("update");
-    if (locked?.inviteCode !== inviteCode) {
-      throw new Refusal("invite_invalid");
+  // Charged before the join runs and kept even if it's refused: a wrong code
+  // is a guess. Counted even with the group's ID in hand: a removed member
+  // knows it and could otherwise guess at the new code without limit. A
+  // retry of a join that already went through (its response was lost) is
+  // never a new guess, so runAction skips this for logged action IDs.
+  const beforeNew = async () => {
+    if (!(await consumeInviteLookup(db, userId))) {
+      throw new Refusal("too_many_lookups");
     }
-    if ((await findMembership(tx, groupId, userId)) !== undefined) return;
+  };
+  return runGroupAction(
+    db,
+    action,
+    async (tx) => {
+      // A missing group and a wrong or reset code look the same to the joiner.
+      const [locked] = await tx
+        .select({ inviteCode: groups.inviteCode })
+        .from(groups)
+        .where(eq(groups.id, groupId))
+        .for("update");
+      if (locked?.inviteCode !== inviteCode) {
+        throw new Refusal("invite_invalid");
+      }
+      if ((await findMembership(tx, groupId, userId)) !== undefined) return;
 
-    const [members] = await tx
-      .select({ n: count() })
-      .from(groupMembers)
-      .where(eq(groupMembers.groupId, groupId));
-    if ((members?.n ?? 0) >= MAX_GROUP_MEMBERS) {
-      throw new Refusal("group_full");
-    }
-    await requireFreeNickname(tx, groupId, nickname, userId);
-    await tx
-      .insert(groupMembers)
-      .values({ groupId, userId, role: "member", nickname });
-  });
+      const [members] = await tx
+        .select({ n: count() })
+        .from(groupMembers)
+        .where(eq(groupMembers.groupId, groupId));
+      if ((members?.n ?? 0) >= MAX_GROUP_MEMBERS) {
+        throw new Refusal("group_full");
+      }
+      await requireFreeNickname(tx, groupId, nickname, userId);
+      await tx
+        .insert(groupMembers)
+        .values({ groupId, userId, role: "member", nickname });
+    },
+    { beforeNew }
+  );
 }
 
 /**

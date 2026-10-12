@@ -16,11 +16,15 @@ export interface SeenListChange {
   movieId: number;
 }
 
-/** Adds a movie to the user's seen list. Already on it: nothing changes. */
+/**
+ * Adds a movie to the user's seen list. Already on it: the list doesn't
+ * change, but this becomes the entry's latest confirmation (see confirmSeen).
+ */
 export function addToSeenList(
   db: Db,
-  { actionId, userId, movieId }: SeenListChange
+  change: SeenListChange
 ): Promise<ActionOutcome> {
+  const { actionId, userId, movieId } = change;
   const action = {
     id: actionId,
     userId,
@@ -28,12 +32,7 @@ export function addToSeenList(
     movieId,
   } as const;
   return runAction(db, action, async (tx) => {
-    const added = await tx
-      .insert(seenMovies)
-      .values({ userId, movieId })
-      .onConflictDoNothing()
-      .returning({ movieId: seenMovies.movieId });
-    if (added.length > 0) await bumpSeenVersion(tx, userId);
+    await confirmSeen(tx, change);
   });
 }
 
@@ -66,4 +65,60 @@ async function bumpSeenVersion(tx: Transaction, userId: string): Promise<void> {
     .update(users)
     .set({ seenVersion: sql`${users.seenVersion} + 1` })
     .where(eq(users.id, userId));
+}
+
+// ---------------------------------------------------------------------------
+// For other modules' actions (a Seen answer in a watch session), inside their
+// transaction. The caller runs the action; these change only the seen list.
+
+/**
+ * Puts the movie on the user's seen list and records `actionId` as its latest
+ * confirmation, whether it was already there or not. Undoing that action
+ * later removes the entry only if no other action confirmed it since.
+ * Returns whether the entry is new.
+ */
+export async function confirmSeen(
+  tx: Transaction,
+  { actionId, userId, movieId }: SeenListChange
+): Promise<boolean> {
+  const added = await tx
+    .insert(seenMovies)
+    .values({ userId, movieId, lastConfirmedByAction: actionId })
+    .onConflictDoNothing()
+    .returning({ movieId: seenMovies.movieId });
+  if (added.length > 0) {
+    await bumpSeenVersion(tx, userId);
+    return true;
+  }
+  // Already seen: the list doesn't change (no version bump), but an undo of
+  // the earlier confirmation must no longer remove it.
+  await tx
+    .update(seenMovies)
+    .set({ lastConfirmedByAction: actionId })
+    .where(and(eq(seenMovies.userId, userId), eq(seenMovies.movieId, movieId)));
+  return false;
+}
+
+/**
+ * Undoes confirmSeen for `actionId`: removes the entry only if that action is
+ * still its latest confirmation. If the movie was confirmed again since (in
+ * another session, or on the Seen movies page), it stays. Returns whether
+ * the entry was removed.
+ */
+export async function withdrawSeen(
+  tx: Transaction,
+  { actionId, userId, movieId }: SeenListChange
+): Promise<boolean> {
+  const removed = await tx
+    .delete(seenMovies)
+    .where(
+      and(
+        eq(seenMovies.userId, userId),
+        eq(seenMovies.movieId, movieId),
+        eq(seenMovies.lastConfirmedByAction, actionId)
+      )
+    )
+    .returning({ movieId: seenMovies.movieId });
+  if (removed.length > 0) await bumpSeenVersion(tx, userId);
+  return removed.length > 0;
 }
