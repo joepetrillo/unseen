@@ -112,7 +112,7 @@ async function runWatchAction(
 const participants = watchSessionParticipants;
 const answers = watchSessionAnswers;
 
-// Joined and not removed. Invited participations (stage 8) don't count yet.
+// Joined and not removed. Invited participations don't count until accepted.
 function activeIn(watchSessionId: string): SQL {
   return sql`(${participants.watchSessionId} = ${watchSessionId} and ${participants.joinedAt} is not null and ${participants.removedAt} is null)`;
 }
@@ -130,11 +130,13 @@ interface Change {
 }
 
 /**
- * Starts a session in a group, with the user as host and only participant
- * (solo; stage 7 adds others). The browser picks the session's ID, so a
- * retried start lands on the same session. If the group already has an
- * active session, the start must name it in `replacedWatchSessionId` (Change
- * filters): it's closed in the same transaction, recording its matches.
+ * Starts a session in a group, with the user as host and only active
+ * participant. `invitedUserIds` (other group members, "who's watching
+ * tonight") get invited participations: they count once they accept
+ * (joinWatchSession). The browser picks the session's ID, so a retried start
+ * lands on the same session. If the group already has an active session, the
+ * start must name it in `replacedWatchSessionId` (Change filters): it's
+ * closed in the same transaction, recording its matches.
  */
 export function startWatchSession(
   db: Db,
@@ -143,10 +145,15 @@ export function startWatchSession(
     watchSessionId: string;
     filters: WatchFilters;
     replacedWatchSessionId: string | null;
+    invitedUserIds: readonly string[];
   }
 ): Promise<WatchSessionOutcome> {
   const { actionId, userId, groupId, watchSessionId, filters } = change;
   const { replacedWatchSessionId } = change;
+  // Sorted and without duplicates (or the host), so a retry compares equal.
+  const invitedUserIds = [...new Set(change.invitedUserIds)]
+    .filter((id) => id !== userId)
+    .sort();
   const action: Action = {
     id: actionId,
     userId,
@@ -155,6 +162,7 @@ export function startWatchSession(
     watchSessionId,
     ...filters,
     replacedWatchSessionId,
+    invitedUserIds,
   };
   return runWatchAction(db, action, async (tx) => {
     // The group's row lock queues starts in one group, so two can't both
@@ -203,6 +211,67 @@ export function startWatchSession(
       role: "host",
       joinedAt: sql`now()`,
     });
+
+    if (invitedUserIds.length > 0) {
+      // Only current members can be invited. Membership changes take the
+      // group's row lock, which this transaction holds, so it can't change
+      // between this check and the insert.
+      const members = await tx
+        .select({ userId: groupMembers.userId })
+        .from(groupMembers)
+        .where(
+          and(
+            eq(groupMembers.groupId, groupId),
+            inArray(groupMembers.userId, invitedUserIds)
+          )
+        );
+      if (members.length !== invitedUserIds.length) {
+        throw new Refusal("not_found");
+      }
+      // joined_at stays null: invited, not participating until they accept.
+      await tx.insert(participants).values(
+        invitedUserIds.map((id) => ({
+          watchSessionId,
+          userId: id,
+          role: "guest" as const,
+        }))
+      );
+    }
+  });
+}
+
+/**
+ * Accepts an invitation: the participation becomes active, so the person's
+ * answers and seen list count from now on. Accepting one that's already
+ * active (from another device) changes nothing.
+ */
+export function joinWatchSession(
+  db: Db,
+  change: Change & { watchSessionId: string; participationId: string }
+): Promise<WatchSessionOutcome> {
+  const { actionId, userId, watchSessionId, participationId } = change;
+  const action: Action = {
+    id: actionId,
+    userId,
+    type: "watch_session_join",
+    watchSessionId,
+    participationId,
+  };
+  return runWatchAction(db, action, async (tx) => {
+    const row = await lockOwnParticipation(
+      tx,
+      participationId,
+      userId,
+      watchSessionId
+    );
+    if (row.removedAt !== null) throw new Refusal("not_participating");
+    if (row.closedAt !== null) throw new Refusal("session_closed");
+    if (row.joinedAt !== null) return;
+    await tx
+      .update(participants)
+      .set({ joinedAt: sql`now()` })
+      .where(eq(participants.id, participationId));
+    await notifyWatchSessionChanged(tx, watchSessionId);
   });
 }
 
@@ -727,6 +796,30 @@ async function lockParticipation(
   userId: string,
   watchSessionId: string
 ): Promise<void> {
+  const row = await lockOwnParticipation(
+    tx,
+    participationId,
+    userId,
+    watchSessionId
+  );
+  if (row.joinedAt === null || row.removedAt !== null) {
+    throw new Refusal("not_participating");
+  }
+  if (row.closedAt !== null) throw new Refusal("session_closed");
+}
+
+// The user's participation in the session the request names, with the
+// session's row locked. Callers check its status.
+async function lockOwnParticipation(
+  tx: Transaction,
+  participationId: string,
+  userId: string,
+  watchSessionId: string
+): Promise<{
+  joinedAt: Date | null;
+  removedAt: Date | null;
+  closedAt: Date | null;
+}> {
   const [row] = await tx
     .select({
       watchSessionId: participants.watchSessionId,
@@ -745,10 +838,7 @@ async function lockParticipation(
   if (row?.userId !== userId || row.watchSessionId !== watchSessionId) {
     throw new Refusal("not_found");
   }
-  if (row.joinedAt === null || row.removedAt !== null) {
-    throw new Refusal("not_participating");
-  }
-  if (row.closedAt !== null) throw new Refusal("session_closed");
+  return row;
 }
 
 async function requireHost(

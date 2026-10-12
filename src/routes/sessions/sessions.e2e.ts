@@ -242,6 +242,7 @@ test("a start that loses the race to someone else's shows their session", async 
       watchSessionId: crypto.randomUUID(),
       filters: NO_FILTERS,
       replacedWatchSessionId: null,
+      invitedUserIds: [],
     })
   ).toBe("applied");
 

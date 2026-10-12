@@ -26,7 +26,10 @@ interface InputsByType {
     /** Sorted and without duplicates, so a retry compares equal. */
     genreIds: number[];
     replacedWatchSessionId: string | null;
+    /** Sorted and without duplicates, like genreIds. */
+    invitedUserIds: string[];
   };
+  watch_session_join: { watchSessionId: string; participationId: string };
   watch_session_end: { watchSessionId: string };
   watch_answer_seen: { participationId: string; movieId: number };
   watch_answer_not_seen: { participationId: string; movieId: number };
@@ -59,6 +62,7 @@ const inputs = [
   "maxYear",
   "genreIds",
   "replacedWatchSessionId",
+  "invitedUserIds",
 ] as const satisfies readonly (keyof LoggedAction)[];
 
 /**
@@ -149,7 +153,7 @@ function isSameAction(logged: LoggedAction, action: Action): boolean {
   );
 }
 
-// Arrays (genre IDs) compare by content; everything else is a plain value.
+// Arrays (genre and user IDs) compare by content; everything else is a plain value.
 function sameValue(a: unknown, b: unknown): boolean {
   if (Array.isArray(a) && Array.isArray(b)) {
     return a.length === b.length && a.every((value, i) => value === b[i]);

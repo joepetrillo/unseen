@@ -18,6 +18,7 @@ import {
   dealCards,
   endWatchSession,
   getActiveWatchSessionId,
+  joinWatchSession,
   listMatches,
   startWatchSession,
   undoLastAnswer,
@@ -106,6 +107,7 @@ async function start(
     watchSessionId,
     filters: { ...NO_FILTERS, genreIds: [world.genreId], ...filters },
     replacedWatchSessionId,
+    invitedUserIds: [],
   });
   expect(outcome).toBe("applied");
   return {
@@ -575,6 +577,7 @@ describe("starting and ending", () => {
         watchSessionId: id(),
         filters: NO_FILTERS,
         replacedWatchSessionId: replaced,
+        invitedUserIds: [],
       });
     expect(await attempt(null)).toBe("session_active");
     expect(await attempt(id())).toBe("session_active");
@@ -599,6 +602,7 @@ describe("starting and ending", () => {
         watchSessionId: id(),
         filters: NO_FILTERS,
         replacedWatchSessionId: null,
+        invitedUserIds: [],
       });
     // Several at once, so at least two overlap on the test pool's two
     // connections.
@@ -619,6 +623,7 @@ describe("starting and ending", () => {
       watchSessionId,
       filters: { ...NO_FILTERS, genreIds: [world.genreId] },
       replacedWatchSessionId: null,
+      invitedUserIds: [],
     };
     expect(await startWatchSession(db, input)).toBe("applied");
     expect(await startWatchSession(db, input)).toBe("duplicate");
@@ -639,6 +644,7 @@ describe("starting and ending", () => {
       watchSessionId: id(),
       filters: NO_FILTERS,
       replacedWatchSessionId: null,
+      invitedUserIds: [],
     });
     expect(outcome).toBe("not_found");
     expect(
@@ -649,6 +655,7 @@ describe("starting and ending", () => {
         watchSessionId: id(),
         filters: NO_FILTERS,
         replacedWatchSessionId: null,
+        invitedUserIds: [],
       })
     ).toBe("not_found");
   });
@@ -705,6 +712,135 @@ describe("starting and ending", () => {
     expect(await answer(world, crossed, m, "not_seen")).toBe("not_found");
     expect((await undo(world, crossed)).outcome).toBe("not_found");
     expect(await matchIds(mine)).toEqual([]);
+  });
+});
+
+describe("invitations", () => {
+  // A second member of world's group, and a session that invites them.
+  async function startWithInvitee() {
+    const guest: World = { ...world, userId: await fixtures.user() };
+    await createGroupMembership(guest);
+    const watchSessionId = id();
+    expect(
+      await startWatchSession(db, {
+        actionId: id(),
+        userId: world.userId,
+        groupId: world.groupId,
+        watchSessionId,
+        filters: { ...NO_FILTERS, genreIds: [world.genreId] },
+        replacedWatchSessionId: null,
+        invitedUserIds: [guest.userId],
+      })
+    ).toBe("applied");
+    const host = {
+      id: watchSessionId,
+      participationId: await participation(world.userId, watchSessionId),
+    };
+    const invited = {
+      id: watchSessionId,
+      participationId: await participation(guest.userId, watchSessionId),
+    };
+    return { guest, host, invited };
+  }
+
+  const join = (world: World, session: Session, actionId = id()) =>
+    joinWatchSession(db, {
+      actionId,
+      userId: world.userId,
+      watchSessionId: session.id,
+      participationId: session.participationId,
+    });
+
+  it("doesn't count an invitee until they accept", async () => {
+    const m = await movie(world);
+    const { guest, host, invited } = await startWithInvitee();
+
+    // Invited isn't participating: no answers, and no say in matches yet.
+    expect(await answer(guest, invited, m, "not_seen")).toBe(
+      "not_participating"
+    );
+    await answer(world, host, m, "not_seen");
+    expect(await matchIds(host)).toEqual([m]);
+
+    const actionId = id();
+    expect(await join(guest, invited, actionId)).toBe("applied");
+    expect(await join(guest, invited, actionId)).toBe("duplicate");
+    // A second accept (another device) changes nothing.
+    expect(await join(guest, invited)).toBe("applied");
+
+    // Now a participant, so the match waits for their answer.
+    expect(await matchIds(host)).toEqual([]);
+    expect(await answer(guest, invited, m, "not_seen")).toBe("applied");
+    expect(await matchIds(host)).toEqual([m]);
+  });
+
+  it("hides movies on an invitee's seen list only after they accept", async () => {
+    const m = await movie(world);
+    const { guest, host, invited } = await startWithInvitee();
+    await addToSeenList(db, {
+      actionId: id(),
+      userId: guest.userId,
+      movieId: m,
+    });
+
+    expect(await deal(host)).toEqual([m]);
+    await join(guest, invited);
+    expect(await deal(host)).toEqual([]);
+  });
+
+  it("lets only the invitee accept, and only while the session is open", async () => {
+    const { guest, invited } = await startWithInvitee();
+    expect(await join(world, invited)).toBe("not_found");
+
+    expect(
+      await endWatchSession(db, {
+        actionId: id(),
+        userId: world.userId,
+        watchSessionId: invited.id,
+      })
+    ).toBe("applied");
+    expect(await join(guest, invited)).toBe("session_closed");
+  });
+
+  it("invites only members of the group", async () => {
+    const stranger = await fixtures.user();
+    const outcome = await startWatchSession(db, {
+      actionId: id(),
+      userId: world.userId,
+      groupId: world.groupId,
+      watchSessionId: id(),
+      filters: NO_FILTERS,
+      replacedWatchSessionId: null,
+      invitedUserIds: [stranger],
+    });
+    expect(outcome).toBe("not_found");
+    expect(await getActiveWatchSessionId(db, world.groupId)).toBe(null);
+  });
+
+  it("treats a retried start with the same invitees in any order as the same", async () => {
+    const a: World = { ...world, userId: await fixtures.user() };
+    const b: World = { ...world, userId: await fixtures.user() };
+    await createGroupMembership(a);
+    await createGroupMembership(b);
+    const input = {
+      actionId: id(),
+      userId: world.userId,
+      groupId: world.groupId,
+      watchSessionId: id(),
+      filters: NO_FILTERS,
+      replacedWatchSessionId: null,
+      invitedUserIds: [a.userId, b.userId],
+    };
+    expect(await startWatchSession(db, input)).toBe("applied");
+    expect(
+      await startWatchSession(db, {
+        ...input,
+        invitedUserIds: [b.userId, a.userId, b.userId],
+      })
+    ).toBe("duplicate");
+    expect(
+      await startWatchSession(db, { ...input, invitedUserIds: [a.userId] })
+    ).toBe("conflict");
   });
 });
 

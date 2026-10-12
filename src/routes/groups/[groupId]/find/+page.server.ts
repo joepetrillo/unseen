@@ -83,6 +83,7 @@ export const actions = {
       watchSessionId,
       filters,
       replacedWatchSessionId: replace === "" ? null : replace,
+      invitedUserIds: [],
     });
     // Someone in the group started one first (both saw "Find a movie"):
     // reload this page, which now shows the session that's going.
