@@ -6,6 +6,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import {
   actions,
   genres,
+  groupMembers,
   groupPastMatches,
   groups,
   movieGenres,
@@ -14,7 +15,11 @@ import {
 } from "#lib/server/db/schema.ts";
 import { connectTestDb, createFixtures } from "#lib/server/testing/db.ts";
 import { deleteAccount, signIn } from "#lib/server/testing/sign-in.ts";
-import { VOTE_COUNT_FLOOR } from "#lib/server/watch-sessions.ts";
+import {
+  startWatchSession,
+  VOTE_COUNT_FLOOR,
+} from "#lib/server/watch-sessions.ts";
+import { NO_FILTERS } from "#lib/watch-fields.ts";
 
 const { pool, db } = connectTestDb();
 const fixtures = createFixtures(db);
@@ -82,7 +87,6 @@ async function signInWithGroup(page: Page): Promise<{ email: string }> {
 
 async function startSession(page: Page): Promise<void> {
   await page.getByRole("link", { name: "Find a movie" }).click();
-  await page.getByText("Filters", { exact: true }).click();
   await page.getByText(genreName, { exact: true }).click();
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page).toHaveURL(/\/sessions\/[0-9a-f-]+$/);
@@ -215,4 +219,39 @@ test("leaving the deck waits for answers still being saved", async ({
 
   await expect(page).toHaveURL(/\/shortlist$/);
   await expect(page.getByRole("listitem")).toHaveCount(2);
+});
+
+test("a start that loses the race to someone else's shows their session", async ({
+  page,
+}) => {
+  await signInWithGroup(page);
+  const groupId = groupIds.at(-1) ?? "";
+  await page.getByRole("link", { name: "Find a movie" }).click();
+  await expect(page.getByRole("button", { name: "Start" })).toBeVisible();
+
+  // Another member starts a session while this page is open.
+  const other = await fixtures.user();
+  await db
+    .insert(groupMembers)
+    .values({ groupId, userId: other, role: "member", nickname: "Other" });
+  expect(
+    await startWatchSession(db, {
+      actionId: crypto.randomUUID(),
+      userId: other,
+      groupId,
+      watchSessionId: crypto.randomUUID(),
+      filters: NO_FILTERS,
+      replacedWatchSessionId: null,
+    })
+  ).toBe("applied");
+
+  await page.getByRole("button", { name: "Start" }).click();
+  await expect(page.getByText("A session is already going")).toBeVisible();
+  // Only its host can replace it.
+  await expect(
+    page.getByRole("link", { name: "Start a new one" })
+  ).toBeHidden();
+  await expect(
+    page.getByRole("link", { name: "Back to Solo night" })
+  ).toBeVisible();
 });

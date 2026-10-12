@@ -25,19 +25,22 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
     : null;
   if (group === null) error(404, "Group not found.");
 
-  const activeWatchSessionId = await getActiveWatchSessionId(db, group.id);
-  // Only the group's active session can be replaced; anything else in the
-  // URL (an old link, a session that has ended) is ignored.
+  const activeId = await getActiveWatchSessionId(db, group.id);
+  const active =
+    activeId === null ? null : await getWatchSession(db, activeId, user.id);
+  const isHost = active?.participation?.role === "host";
+  // Only the active session's host can replace it; anything else in the URL
+  // (an old link, a session that has ended) is ignored.
   const replaceParam = z.uuid().safeParse(url.searchParams.get("replace"));
   const replacing =
-    replaceParam.success && replaceParam.data === activeWatchSessionId
-      ? await getWatchSession(db, replaceParam.data, user.id)
+    isHost && replaceParam.success && replaceParam.data === activeId
+      ? active
       : null;
 
   return {
     group: { id: group.id, name: group.name },
     genres: await db.query.genres.findMany({ orderBy: { name: "asc" } }),
-    activeWatchSessionId,
+    active: active === null ? null : { id: active.id, isHost },
     replacing:
       replacing === null
         ? null
@@ -73,16 +76,20 @@ export const actions = {
     if (!form.ok) return form.failure;
 
     const { actionId, watchSessionId, replace, ...filters } = form.data;
-    const failed = watchRefusal(
-      await startWatchSession(db, {
-        actionId,
-        userId: user.id,
-        groupId: groupId.data,
-        watchSessionId,
-        filters,
-        replacedWatchSessionId: replace === "" ? null : replace,
-      })
-    );
+    const outcome = await startWatchSession(db, {
+      actionId,
+      userId: user.id,
+      groupId: groupId.data,
+      watchSessionId,
+      filters,
+      replacedWatchSessionId: replace === "" ? null : replace,
+    });
+    // Someone in the group started one first (both saw "Find a movie"):
+    // reload this page, which now shows the session that's going.
+    if (outcome === "session_active") {
+      redirect(303, `/groups/${groupId.data}/find`);
+    }
+    const failed = watchRefusal(outcome);
     if (failed !== null) return failed;
     redirect(303, `/sessions/${watchSessionId}`);
   },
