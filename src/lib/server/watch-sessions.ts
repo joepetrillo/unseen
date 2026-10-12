@@ -234,12 +234,15 @@ export function endWatchSession(
 export function answerMovie(
   db: Db,
   change: Change & {
+    /** The session the request is about (the page's URL). */
+    watchSessionId: string;
     participationId: string;
     movieId: number;
     answer: "seen" | "not_seen";
   }
 ): Promise<WatchSessionOutcome> {
-  const { actionId, userId, participationId, movieId, answer } = change;
+  const { actionId, userId, watchSessionId, participationId, movieId } = change;
+  const { answer } = change;
   const action: Action = {
     id: actionId,
     userId,
@@ -248,11 +251,7 @@ export function answerMovie(
     movieId,
   };
   return runWatchAction(db, action, async (tx) => {
-    const { watchSessionId } = await lockParticipation(
-      tx,
-      participationId,
-      userId
-    );
+    await lockParticipation(tx, participationId, userId, watchSessionId);
     if (answer === "seen") {
       await setAnswer(tx, participationId, movieId, "seen");
       await confirmSeen(tx, { actionId, userId, movieId });
@@ -274,9 +273,9 @@ export function answerMovie(
  */
 export async function undoLastAnswer(
   db: Db,
-  change: Change & { participationId: string }
+  change: Change & { watchSessionId: string; participationId: string }
 ): Promise<{ outcome: WatchSessionOutcome; movieId: number | null }> {
-  const { actionId, userId, participationId } = change;
+  const { actionId, userId, watchSessionId, participationId } = change;
   const action: Action = {
     id: actionId,
     userId,
@@ -284,11 +283,7 @@ export async function undoLastAnswer(
     participationId,
   };
   const outcome = await runWatchAction(db, action, async (tx) => {
-    const { watchSessionId } = await lockParticipation(
-      tx,
-      participationId,
-      userId
-    );
+    await lockParticipation(tx, participationId, userId, watchSessionId);
     const [last] = await latestAnswers(tx, participationId).limit(1);
     if (last?.movieId == null) throw new Refusal("nothing_to_undo");
     const { movieId } = last;
@@ -723,13 +718,15 @@ async function lockSessionForMember(
 
 /**
  * The checks for answering and undoing: the participation is the user's,
- * still active, in a session that's still open. Locks the session's row.
+ * belongs to the session the request names, is still active, and the
+ * session is still open. Locks the session's row.
  */
 async function lockParticipation(
   tx: Transaction,
   participationId: string,
-  userId: string
-): Promise<{ watchSessionId: string }> {
+  userId: string,
+  watchSessionId: string
+): Promise<void> {
   const [row] = await tx
     .select({
       watchSessionId: participants.watchSessionId,
@@ -742,12 +739,16 @@ async function lockParticipation(
     .innerJoin(watchSessions, eq(watchSessions.id, participants.watchSessionId))
     .where(eq(participants.id, participationId))
     .for("update", { of: watchSessions });
-  if (row?.userId !== userId) throw new Refusal("not_found");
+  // A participation from another session (a mismatched or crafted request)
+  // gets the same answer as someone else's: the reply describes the
+  // session in the URL, so the two must agree.
+  if (row?.userId !== userId || row.watchSessionId !== watchSessionId) {
+    throw new Refusal("not_found");
+  }
   if (row.joinedAt === null || row.removedAt !== null) {
     throw new Refusal("not_participating");
   }
   if (row.closedAt !== null) throw new Refusal("session_closed");
-  return { watchSessionId: row.watchSessionId };
 }
 
 async function requireHost(

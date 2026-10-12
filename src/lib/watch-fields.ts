@@ -24,11 +24,13 @@ export const NO_FILTERS: WatchFilters = {
   genreIds: [],
 };
 
-// An empty field ("Any") means no limit.
-function optionalWholeNumber(min: number, max: number) {
+// An empty field ("Any") means no limit. Out-of-range values get a message
+// written for people (readForm shows it).
+function optionalWholeNumber(min: number, max: number, label: string) {
+  const error = `Pick a ${label} between ${String(min)} and ${String(max)}.`;
   return z
     .union([z.literal("").transform(() => null), z.coerce.number()])
-    .pipe(z.int().min(min).max(max).nullable());
+    .pipe(z.int({ error }).min(min, { error }).max(max, { error }).nullable());
 }
 
 /**
@@ -37,9 +39,13 @@ function optionalWholeNumber(min: number, max: number) {
  */
 export const watchFiltersSchema = z
   .object({
-    maxRuntime: optionalWholeNumber(1, RUNTIME_MAX).default(null),
-    minYear: optionalWholeNumber(YEAR_MIN, YEAR_MAX).default(null),
-    maxYear: optionalWholeNumber(YEAR_MIN, YEAR_MAX).default(null),
+    maxRuntime: optionalWholeNumber(
+      1,
+      RUNTIME_MAX,
+      "length in minutes"
+    ).default(null),
+    minYear: optionalWholeNumber(YEAR_MIN, YEAR_MAX, "year").default(null),
+    maxYear: optionalWholeNumber(YEAR_MIN, YEAR_MAX, "year").default(null),
     genreIds: z
       .union([z.string(), z.array(z.string())])
       .default([])

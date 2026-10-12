@@ -143,6 +143,7 @@ function answer(
   return answerMovie(db, {
     actionId,
     userId: world.userId,
+    watchSessionId: session.id,
     participationId: session.participationId,
     movieId,
     answer: choice,
@@ -153,6 +154,7 @@ function undo(world: World, session: Session, actionId = id()) {
   return undoLastAnswer(db, {
     actionId,
     userId: world.userId,
+    watchSessionId: session.id,
     participationId: session.participationId,
   });
 }
@@ -677,6 +679,7 @@ describe("starting and ending", () => {
       await answerMovie(db, {
         actionId: id(),
         userId: guest.userId,
+        watchSessionId: session.id,
         participationId: session.participationId,
         movieId: m,
         answer: "seen",
@@ -688,6 +691,20 @@ describe("starting and ending", () => {
       .set({ removedAt: new Date() })
       .where(inArray(watchSessionParticipants.id, [guest.participationId]));
     expect(await answer(guest, guest, m, "not_seen")).toBe("not_participating");
+  });
+
+  it("rejects a participation that belongs to another session", async () => {
+    const m = await movie(world);
+    const mine = await start(world);
+    // Someone else's session, in a group this user isn't in.
+    const other = await newWorld();
+    const theirs = await start(other);
+
+    // The user's own participation, sent against the other session's URL.
+    const crossed = { id: theirs.id, participationId: mine.participationId };
+    expect(await answer(world, crossed, m, "not_seen")).toBe("not_found");
+    expect((await undo(world, crossed)).outcome).toBe("not_found");
+    expect(await matchIds(mine)).toEqual([]);
   });
 });
 

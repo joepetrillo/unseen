@@ -1,7 +1,8 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
-  import { refreshAll } from "$app/navigation";
+  import { beforeNavigate, goto, refreshAll } from "$app/navigation";
   import { resolve } from "$app/paths";
+  import type { ResolvedPathname } from "$app/types";
   import ArrowLeft01Icon from "@hugeicons/core-free-icons/ArrowLeft01Icon";
   import Undo02Icon from "@hugeicons/core-free-icons/Undo02Icon";
   import { HugeiconsIcon } from "@hugeicons/svelte";
@@ -47,6 +48,27 @@
     })
   );
 
+  // Leaving the page drops answers still waiting to be sent, so any link
+  // (back, Matches, Change filters) waits for them first. A failed save
+  // keeps you here with Retry. Closing the tab gets the browser's own
+  // "Leave this page?" question instead.
+  beforeNavigate((navigation) => {
+    const target = navigation.to?.url;
+    if (deck === null || deck.pending === 0 || target === undefined) return;
+    navigation.cancel();
+    if (navigation.willUnload) return;
+    // The navigation Kit just resolved and we cancelled: same origin (an
+    // unload would have returned above), so its path is already resolved.
+    const href =
+      `${target.pathname}${target.search}${target.hash}` as ResolvedPathname;
+    const saving = deck;
+    void saving.settle().then((saved) => {
+      // refreshAll: Kit preloaded the link's data when it was touched,
+      // before these saves landed; that copy would show stale matches.
+      if (saved) void goto(href, { refreshAll: true });
+    });
+  });
+
   const end = new ActionForm({
     scope: () => data.session.id,
     confirm: () =>
@@ -78,7 +100,10 @@
 {#if deck !== null}
   <!-- A full-screen layout (not Page): the card takes whatever height the
        header and buttons leave. dvh follows Safari's toolbar as it hides. -->
+  <!-- No link preloading: matches change with every answer, and data
+       fetched when a link is touched could be stale by the time it opens. -->
   <div
+    data-sveltekit-preload-data="off"
     class="mx-auto flex h-dvh w-full max-w-md flex-col pt-[max(env(safe-area-inset-top),0.75rem)] pr-[max(env(safe-area-inset-right),1.25rem)] pb-[max(env(safe-area-inset-bottom),1rem)] pl-[max(env(safe-area-inset-left),1.25rem)]"
   >
     <header class="flex items-center justify-between gap-3">
@@ -234,12 +259,24 @@
         </Button>
         {#if data.session.isHost}
           <span class="text-muted-foreground" aria-hidden="true">·</span>
-          <form method="POST" action="?/end" use:enhance={end.submit}>
+          <!-- Ending waits for every answer to be saved, or they'd miss the
+               matches the end records (and then be refused). -->
+          <form
+            method="POST"
+            action="?/end"
+            use:enhance={(input) => {
+              if (deck.pending > 0) {
+                input.cancel();
+                return;
+              }
+              return end.submit(input);
+            }}
+          >
             <Button
               type="submit"
               variant="link"
               size="sm"
-              disabled={end.saving}
+              disabled={end.saving || deck.pending > 0}
             >
               {end.saving ? "Ending…" : "End session"}
             </Button>

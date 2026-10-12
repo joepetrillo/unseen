@@ -42,13 +42,20 @@ const correctionSchema = z.object({
 export const actions = {
   // "Actually, I've seen this": a Seen answer that replaces the Not seen, so
   // it's on the undo stack like any other answer.
-  seen: async ({ request, locals }) => {
+  seen: async ({ request, locals, params }) => {
     const user = requireUser(locals);
+    const id = z.uuid().safeParse(params.watchSessionId);
+    if (!id.success) error(404, "Session not found.");
     const form = await readForm(request, correctionSchema);
     if (!form.ok) return form.failure;
     return (
       watchRefusal(
-        await answerMovie(db, { ...form.data, userId: user.id, answer: "seen" })
+        await answerMovie(db, {
+          ...form.data,
+          userId: user.id,
+          watchSessionId: id.data,
+          answer: "seen",
+        })
       ) ?? undefined
     );
   },

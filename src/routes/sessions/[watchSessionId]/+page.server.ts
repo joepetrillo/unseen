@@ -118,7 +118,7 @@ export const actions = {
 
     const { exclude, ...change } = form.data;
     const failed = watchRefusal(
-      await answerMovie(db, { ...change, userId: user.id })
+      await answerMovie(db, { ...change, userId: user.id, watchSessionId })
     );
     if (failed !== null) return failed;
     return deckState(watchSessionId, change.participationId, exclude);
@@ -134,6 +134,7 @@ export const actions = {
     const { outcome, movieId } = await undoLastAnswer(db, {
       ...form.data,
       userId: user.id,
+      watchSessionId,
     });
     const failed = watchRefusal(outcome);
     if (failed !== null) return failed;

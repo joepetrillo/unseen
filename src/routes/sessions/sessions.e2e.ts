@@ -191,3 +191,28 @@ test("a save that loses its response is retried once, not twice", async ({
     );
   expect(logged).toHaveLength(1);
 });
+
+test("leaving the deck waits for answers still being saved", async ({
+  page,
+}) => {
+  await signInWithGroup(page);
+  await startSession(page);
+  await expect(cardTitle(page)).toHaveText(title(0));
+
+  // Slow down the first save so the second answer is still queued (not yet
+  // sent) when the person taps Matches.
+  await page.route(
+    (url) => url.searchParams.has("/answer"),
+    async (route) => {
+      await new Promise((done) => setTimeout(done, 1000));
+      await route.continue();
+    },
+    { times: 1 }
+  );
+  await page.getByRole("button", { name: "Not seen" }).click();
+  await page.getByRole("button", { name: "Not seen" }).click();
+  await page.getByRole("link", { name: /^Matches/ }).click();
+
+  await expect(page).toHaveURL(/\/shortlist$/);
+  await expect(page.getByRole("listitem")).toHaveCount(2);
+});

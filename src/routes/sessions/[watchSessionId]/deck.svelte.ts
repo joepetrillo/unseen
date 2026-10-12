@@ -104,6 +104,16 @@ export class Deck {
     void this.#send();
   }
 
+  /**
+   * Waits for the answers on their way to the server. True once every one
+   * is saved; false if one failed (it waits for Retry) or the session
+   * refused it.
+   */
+  async settle(): Promise<boolean> {
+    await this.#idle();
+    return this.pending === 0 && !this.#stopped();
+  }
+
   retry(): void {
     void this.#send();
   }
