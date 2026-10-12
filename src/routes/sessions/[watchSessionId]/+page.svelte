@@ -82,7 +82,7 @@
   const end = new ActionForm({
     scope: () => data.session.id,
     confirm: () =>
-      "End this session? Its matches are saved and come up last next time.",
+      "End this session for everyone? Its matches stay on its page.",
   });
 
   // "Sam", "Sam and Alex", "Sam, Alex, and Jo".
@@ -254,8 +254,6 @@
             Saving…
           {:else if deck.offline}
             Can't reach Vunu. Trying again…
-          {:else if deck.ruledOut}
-            Someone has seen this one, so it can't be a match.
           {/if}
         </p>
         {#if deck.error !== null}

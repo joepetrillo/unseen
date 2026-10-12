@@ -141,11 +141,6 @@ export const deckStateSchema = z.object({
    * pool is used up.
    */
   waitingOn: z.array(z.string()).nullable(),
-  /**
-   * The card the browser said was on screen, when it's now on someone's
-   * seen list: someone else ruled it out.
-   */
-  ruledOut: z.int().nullable(),
   /** The session's filters, described (the host can change them). */
   filters: z.string(),
 });

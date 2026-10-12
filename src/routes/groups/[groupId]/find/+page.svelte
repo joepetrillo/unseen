@@ -125,8 +125,8 @@
 
       {#if data.replacing !== null}
         <p class="mt-6 text-sm text-muted-foreground">
-          Starting ends the current session. Its matches are saved and come up
-          last next time.
+          Starting ends the current session for everyone. Its matches stay on
+          its page.
         </p>
       {/if}
 

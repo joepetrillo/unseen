@@ -51,8 +51,8 @@ const UNDO_FAILED = "Couldn't undo. Check your connection and try again.";
  * - Between saves, a poll (`connect`) brings in other people's changes the
  *   same way. Polls pause while a save or undo is on its way, and a poll
  *   that started before one is ignored, so it can't undo what you just did.
- *   If someone else rules out the card on screen, it stays (a card that
- *   moved as you tapped would take your answer) and a note says why.
+ *   The card on screen stays even if someone else rules it out meanwhile: a
+ *   card that moved as you tapped would take your answer.
  *
  * A class with `$state` fields, in a .svelte.ts module so runes work: the
  * page reads `deck.cards` and updates when it changes, with no store.
@@ -80,8 +80,6 @@ export class Deck {
    * Empty means nobody does (the filters are used up); null, not known yet.
    */
   waitingOn = $state.raw<string[] | null>(null);
-  // A card someone has seen since it was dealt to you: it can't be a match.
-  #ruledOutId = $state<number | null>(null);
   /** The last poll didn't reach the server. */
   offline = $state(false);
   /** The session's filters, described; the host can change them. */
@@ -136,11 +134,6 @@ export class Deck {
 
   get card(): MovieCard | undefined {
     return this.cards[0];
-  }
-
-  /** Someone has seen the card on screen since it was dealt. */
-  get ruledOut(): boolean {
-    return this.card?.id === this.#ruledOutId;
   }
 
   get canUndo(): boolean {
@@ -276,12 +269,11 @@ export class Deck {
     }
   }
 
-  // What the deck holds, for the server: the card on screen, and with the
-  // answers still waiting, everything the next deal must skip.
-  #held(): { visible: string; exclude: string } {
+  // What the deck holds, for the server: the card on screen and the answers
+  // still waiting, which the next deal must skip.
+  #held(): { exclude: string } {
     const visible = this.card;
     return {
-      visible: visible === undefined ? "" : String(visible.id),
       exclude: [
         ...(visible === undefined ? [] : [visible.id]),
         ...this.#saves.map((waiting) => waiting.card.id),
@@ -298,9 +290,6 @@ export class Deck {
     this.#updates?.saw(fingerprint);
     const answered = this.#saves.map((save) => save.card.id);
     const visible = this.card;
-    // Kept by ID, so it shows only while that card is on screen (you may
-    // have moved on since the request went out).
-    if (state.ruledOut !== null) this.#ruledOutId = state.ruledOut;
     const fresh = cards.filter(
       (card) => !answered.includes(card.id) && card.id !== visible?.id
     );

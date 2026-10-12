@@ -141,16 +141,15 @@ test("two people see each other's answers and reach a shared match", async ({
   await expect(alex.getByRole("link", { name: "Matches 1" })).toBeVisible(LIVE);
 
   // Sam is looking at movie 2 when Alex says Seen to it: the card stays on
-  // Sam's screen (it never moves under a tap), with a note.
+  // Sam's screen (it never moves under a tap), and it can't match.
   await expect(card(sam)).toHaveText(title(1));
   await answer(alex, "Seen");
-  await expect(
-    sam.getByText("Someone has seen this one, so it can't be a match.")
-  ).toBeVisible(LIVE);
+  // Several poll rounds: the card is still there.
+  await sam.waitForTimeout(6000);
   await expect(card(sam)).toHaveText(title(1));
   await answer(sam, "Not seen");
   await expect(card(sam)).toHaveText(title(2));
-  await expect(sam.getByText("so it can't be a match")).toBeHidden();
+  await expect(sam.getByRole("link", { name: "Matches 1" })).toBeVisible();
 
   // Alex finishes first and waits on Sam, by name.
   await answer(alex, "Not seen");

@@ -17,7 +17,6 @@ function state(fingerprint: string): DeckState {
     canUndo: false,
     fingerprint,
     waitingOn: null,
-    ruledOut: null,
     filters: "Any length · All genres · Any year",
   };
 }

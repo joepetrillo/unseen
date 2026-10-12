@@ -755,7 +755,6 @@ describe("changing filters", () => {
       watchSessionId: session.id,
       participationId: session.participationId,
       exclude: [],
-      visible: null,
     });
     expect(state.matchCount).toBe(1);
     expect(state.filters).toContain("Any length");
@@ -1013,12 +1012,11 @@ describe("together: polling and simultaneous answers", () => {
     return { guest, host, guestSession };
   }
 
-  const read = (session: Session, visible: number | null = null) =>
+  const read = (session: Session) =>
     readDeckState(db, {
       watchSessionId: session.id,
       participationId: session.participationId,
-      exclude: visible === null ? [] : [visible],
-      visible,
+      exclude: [],
     });
 
   const poll = (userId: string, session: Session, since: string) =>
@@ -1028,7 +1026,6 @@ describe("together: polling and simultaneous answers", () => {
       participationId: session.participationId,
       since,
       exclude: [],
-      visible: null,
     });
 
   it("answers a poll with the same fingerprint as unchanged", async () => {
@@ -1091,8 +1088,8 @@ describe("together: polling and simultaneous answers", () => {
   it("says who you're waiting on once you've answered everything", async () => {
     const m = await movie(world);
     const { guest, host, guestSession } = await startTogether();
-    // With a card on screen, nobody is waited on yet.
-    expect((await read(host, m)).waitingOn).toBe(null);
+    // With a card left to deal, nobody is waited on yet.
+    expect((await read(host)).waitingOn).toBe(null);
 
     await answer(world, host, m, "not_seen");
     expect((await read(host)).waitingOn).toEqual(["Sam"]);
@@ -1102,18 +1099,6 @@ describe("together: polling and simultaneous answers", () => {
     const done = await read(host);
     expect(done.waitingOn).toEqual([]);
     expect(done.matchCount).toBe(1);
-  });
-
-  it("reports the card on screen when someone else rules it out", async () => {
-    const m = await movie(world);
-    const { guest, host, guestSession } = await startTogether();
-    expect((await read(host, m)).ruledOut).toBe(null);
-
-    await answer(guest, guestSession, m, "seen");
-    const state = await read(host, m);
-    expect(state.ruledOut).toBe(m);
-    // The card stays on your screen until you answer it.
-    expect(state.waitingOn).toBe(null);
   });
 
   it("counts a match once when both answer Not seen at the same moment", async () => {

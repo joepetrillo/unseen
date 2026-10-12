@@ -748,8 +748,6 @@ interface DeckRequest {
   participationId: string;
   /** Cards the browser holds (on screen or waiting to save): not dealt. */
   exclude: readonly number[];
-  /** The card on screen, if any. */
-  visible: number | null;
 }
 
 /**
@@ -831,7 +829,7 @@ export async function describeSessionFilters(
 
 async function deckStateIn(
   tx: Transaction,
-  { watchSessionId, participationId, exclude, visible }: DeckRequest
+  { watchSessionId, participationId, exclude }: DeckRequest
 ): Promise<DeckState> {
   const fingerprint = await fingerprintIn(tx, watchSessionId);
   // The host can change them mid-session, so they come with every state.
@@ -853,16 +851,12 @@ async function deckStateIn(
   });
   const matchCount = await countMatches(tx, watchSessionId);
   const undoable = await canUndo(tx, participationId);
-  const ruledOut =
-    visible !== null && (await seenBySomeone(tx, watchSessionId, visible))
-      ? visible
-      : null;
 
-  // Nothing left for you to answer: who still has movies to answer? Their
-  // deck is the same pool minus their own answers, so ask it for one card
-  // each.
+  // Nothing left to deal you (beyond the cards you hold): who still has
+  // movies to answer? Their deck is the same pool minus their own answers,
+  // so ask it for one card each.
   let waitingOn: string[] | null = null;
-  if (cards.length === 0 && visible === null) {
+  if (cards.length === 0) {
     waitingOn = [];
     for (const person of await listParticipants(tx, watchSessionId)) {
       if (!person.joined || person.participationId === participationId) {
@@ -882,7 +876,6 @@ async function deckStateIn(
     canUndo: undoable,
     fingerprint,
     waitingOn,
-    ruledOut,
     filters,
   };
 }
@@ -1035,21 +1028,6 @@ async function setAnswer(
       target: [answers.participationId, answers.movieId],
       set: { answer, answeredAt: sql`now()` },
     });
-}
-
-// Whether any active participant has the movie on their seen list.
-async function seenBySomeone(
-  tx: Transaction,
-  watchSessionId: string,
-  movieId: number
-): Promise<boolean> {
-  const [row] = await tx
-    .select({ one: sql`1` })
-    .from(seenMovies)
-    .innerJoin(participants, eq(participants.userId, seenMovies.userId))
-    .where(and(activeIn(watchSessionId), eq(seenMovies.movieId, movieId)))
-    .limit(1);
-  return row !== undefined;
 }
 
 /**

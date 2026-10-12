@@ -3,10 +3,7 @@ import { z } from "zod";
 
 import { db } from "#lib/server/db/index.ts";
 import { requireUser } from "#lib/server/require-user.ts";
-import {
-  excludeSchema,
-  visibleSchema,
-} from "#lib/server/watch-session-forms.ts";
+import { excludeSchema } from "#lib/server/watch-session-forms.ts";
 import { pollWatchSession } from "#lib/server/watch-sessions.ts";
 import type { PollReply } from "#lib/watch-fields.ts";
 
@@ -16,7 +13,6 @@ const pollSchema = z.object({
   participationId: z.uuid(),
   since: z.string().max(64),
   exclude: excludeSchema,
-  visible: visibleSchema,
 });
 
 // The deck's poll (#lib/watch-session-updates.ts). A GET: it only reads, so

@@ -6,7 +6,6 @@ import { readForm } from "#lib/server/forms.ts";
 import { requireUser } from "#lib/server/require-user.ts";
 import {
   excludeSchema,
-  visibleSchema,
   watchRefusal,
 } from "#lib/server/watch-session-forms.ts";
 import {
@@ -86,7 +85,6 @@ export const load: PageServerLoad = async ({ params, locals }) => {
       watchSessionId: session.id,
       participationId: session.participation.id,
       exclude: [],
-      visible: null,
     }),
   };
 };
@@ -99,7 +97,6 @@ const answerSchema = z.object({
   movieId: movieIdSchema,
   answer: z.enum(["seen", "not_seen"]),
   exclude: excludeSchema,
-  visible: visibleSchema,
 });
 
 // Undo and join name the participation, nothing else.
@@ -123,7 +120,7 @@ export const actions = {
     const form = await readForm(request, answerSchema);
     if (!form.ok) return form.failure;
 
-    const { exclude, visible, ...change } = form.data;
+    const { exclude, ...change } = form.data;
     const failed = watchRefusal(
       await answerMovie(db, { ...change, userId: user.id, watchSessionId })
     );
@@ -132,7 +129,6 @@ export const actions = {
       watchSessionId,
       participationId: change.participationId,
       exclude,
-      visible,
     });
   },
 
