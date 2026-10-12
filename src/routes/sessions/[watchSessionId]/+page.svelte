@@ -69,6 +69,7 @@
     });
   });
 
+  const join = new ActionForm({ scope: () => data.session.id });
   const end = new ActionForm({
     scope: () => data.session.id,
     confirm: () =>
@@ -186,9 +187,11 @@
           </p>
           <div class="mt-6 flex flex-col gap-3">
             <Button size="lg" href={shortlistHref}>See the matches</Button>
-            <Button variant="ghost" href={changeFiltersHref}>
-              Change filters
-            </Button>
+            {#if data.session.isHost}
+              <Button variant="ghost" href={changeFiltersHref}>
+                Change filters
+              </Button>
+            {/if}
           </div>
         </div>
       {/if}
@@ -253,11 +256,12 @@
         {/each}
       </div>
 
-      <div class="flex items-center justify-center gap-2 text-sm">
-        <Button variant="link" size="sm" href={changeFiltersHref}>
-          Change filters
-        </Button>
-        {#if data.session.isHost}
+      <!-- Host only: changing filters replaces the session for everyone. -->
+      {#if data.session.isHost}
+        <div class="flex items-center justify-center gap-2 text-sm">
+          <Button variant="link" size="sm" href={changeFiltersHref}>
+            Change filters
+          </Button>
           <span class="text-muted-foreground" aria-hidden="true">·</span>
           <!-- Ending waits for every answer to be saved, or they'd miss the
                matches the end records (and then be refused). -->
@@ -281,8 +285,8 @@
               {end.saving ? "Ending…" : "End session"}
             </Button>
           </form>
-        {/if}
-      </div>
+        </div>
+      {/if}
       {#if end.error}
         <p class="text-center text-sm text-destructive" role="alert">
           {end.error}
@@ -301,15 +305,68 @@
     {:else}
       <p class="text-muted-foreground">It ended without any matches.</p>
     {/if}
-    <Button
-      class="mt-8 w-full"
-      size="lg"
-      href={resolve("/groups/[groupId]/find", {
-        groupId: data.session.groupId,
-      })}
-    >
-      Find a movie
-    </Button>
+    <!-- The host may have changed filters, which starts a new session. -->
+    {#if data.current !== null}
+      <Button
+        class="mt-8 w-full"
+        size="lg"
+        href={resolve("/sessions/[watchSessionId]", {
+          watchSessionId: data.current,
+        })}
+      >
+        Go to the current session
+      </Button>
+    {:else}
+      <Button
+        class="mt-8 w-full"
+        size="lg"
+        href={resolve("/groups/[groupId]/find", {
+          groupId: data.session.groupId,
+        })}
+      >
+        Find a movie
+      </Button>
+    {/if}
+  </Page>
+{:else if data.view === "invited"}
+  <Page
+    title={data.host === null
+      ? "Join this session?"
+      : `${data.host} invited you`}
+    description="Answer Seen or Not seen on your own phone. Anything nobody has seen becomes a match."
+    back={{ href: groupHref, label: data.session.groupName }}
+  >
+    <Card.Root>
+      <Card.Header>
+        <Card.Title>Watching together</Card.Title>
+        <Card.Description>{data.joined.join(", ")}</Card.Description>
+      </Card.Header>
+      <Card.Content>
+        <p class="text-sm text-muted-foreground">{data.session.filters}</p>
+      </Card.Content>
+      <Card.Footer>
+        <form
+          class="w-full"
+          method="POST"
+          action="?/join"
+          use:enhance={join.submit}
+        >
+          <input
+            type="hidden"
+            name="participationId"
+            value={data.participationId}
+          />
+          <Button type="submit" size="lg" class="w-full" disabled={join.saving}>
+            {join.saving ? "Joining…" : "Join"}
+          </Button>
+          {#if join.error}
+            <p class="mt-3 text-sm text-destructive" role="alert">
+              {join.error}
+            </p>
+          {/if}
+        </form>
+      </Card.Footer>
+    </Card.Root>
   </Page>
 {:else}
   <Page

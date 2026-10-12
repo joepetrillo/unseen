@@ -20,6 +20,7 @@ import {
   getActiveWatchSessionId,
   joinWatchSession,
   listMatches,
+  listParticipants,
   startWatchSession,
   undoLastAnswer,
   VOTE_COUNT_FLOOR,
@@ -800,6 +801,35 @@ describe("invitations", () => {
       })
     ).toBe("applied");
     expect(await join(guest, invited)).toBe("session_closed");
+  });
+
+  it("keeps people who joined when the host changes filters", async () => {
+    const { guest, host, invited } = await startWithInvitee();
+    const late: World = { ...world, userId: await fixtures.user() };
+    await createGroupMembership(late);
+    await join(guest, invited);
+
+    const next = id();
+    expect(
+      await startWatchSession(db, {
+        actionId: id(),
+        userId: world.userId,
+        groupId: world.groupId,
+        watchSessionId: next,
+        filters: NO_FILTERS,
+        replacedWatchSessionId: host.id,
+        invitedUserIds: [guest.userId, late.userId],
+      })
+    ).toBe("applied");
+
+    const people = await listParticipants(db, next);
+    expect(
+      people.map(({ userId, role, joined }) => ({ userId, role, joined }))
+    ).toEqual([
+      { userId: world.userId, role: "host", joined: true },
+      { userId: guest.userId, role: "guest", joined: true },
+      { userId: late.userId, role: "guest", joined: false },
+    ]);
   });
 
   it("invites only members of the group", async () => {

@@ -13,9 +13,12 @@ import {
   canUndo,
   dealCards,
   endWatchSession,
+  getActiveWatchSessionId,
   getCard,
   getWatchSession,
+  joinWatchSession,
   listMatches,
+  listParticipants,
   undoLastAnswer,
 } from "#lib/server/watch-sessions.ts";
 import { describeFilters, type MovieCard } from "#lib/watch-fields.ts";
@@ -69,10 +72,32 @@ export const load: PageServerLoad = async ({ params, locals }) => {
   };
 
   if (session.closedAt !== null) {
+    // The group's session now, if you're in it or invited (after Change
+    // filters, say), so the ended screen can lead there.
+    const activeId = await getActiveWatchSessionId(db, session.groupId);
+    const active =
+      activeId === null ? null : await getWatchSession(db, activeId, user.id);
     return {
       ...base,
       view: "closed" as const,
       matches: await listMatches(db, session.id),
+      current:
+        active !== null &&
+        (active.participation !== null || active.invitation !== null)
+          ? active.id
+          : null,
+    };
+  }
+  if (session.invitation !== null) {
+    const people = await listParticipants(db, session.id);
+    return {
+      ...base,
+      view: "invited" as const,
+      participationId: session.invitation.id,
+      host: people.find((person) => person.role === "host")?.nickname ?? null,
+      joined: people
+        .filter((person) => person.joined)
+        .map((person) => person.nickname),
     };
   }
   if (session.participation === null) {
@@ -96,7 +121,8 @@ const answerSchema = z.object({
   exclude: excludeSchema,
 });
 
-const undoSchema = z.object({
+// Undo and join name the participation, nothing else.
+const participationSchema = z.object({
   actionId: z.uuid(),
   participationId: z.uuid(),
 });
@@ -127,7 +153,7 @@ export const actions = {
   undo: async ({ request, locals, params }) => {
     const user = requireUser(locals);
     const watchSessionId = sessionIdFrom(params);
-    const form = await readForm(request, undoSchema);
+    const form = await readForm(request, participationSchema);
     if (!form.ok) return form.failure;
 
     const { participationId } = form.data;
@@ -146,6 +172,22 @@ export const actions = {
       canUndo(db, participationId),
     ]);
     return { card, matchCount: matches.length, canUndo: undoable };
+  },
+
+  // Accepting an invitation. Success reloads the page, which shows the deck.
+  join: async ({ request, locals, params }) => {
+    const user = requireUser(locals);
+    const watchSessionId = sessionIdFrom(params);
+    const form = await readForm(request, participationSchema);
+    if (!form.ok) return form.failure;
+    const failed = watchRefusal(
+      await joinWatchSession(db, {
+        ...form.data,
+        userId: user.id,
+        watchSessionId,
+      })
+    );
+    if (failed !== null) return failed;
   },
 
   end: async ({ request, locals, params }) => {

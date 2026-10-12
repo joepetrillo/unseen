@@ -59,8 +59,8 @@
 <svelte:head><title>{group.name} · Vunu</title></svelte:head>
 
 <Page title={group.name} back={{ href: resolve("/"), label: "Home" }}>
-  <!-- One active session per group: continue it, or start one. -->
-  {#if data.activeWatchSessionId === null}
+  <!-- One active session per group: continue it, join it, or start one. -->
+  {#if data.activeWatchSession === null}
     <Button
       size="lg"
       class="mb-6 w-full"
@@ -68,15 +68,21 @@
     >
       Find a movie
     </Button>
+  {:else if data.activeWatchSession.mine === "outside"}
+    <p class="mb-6 text-muted-foreground">
+      Others in {group.name} have a session going.
+    </p>
   {:else}
     <Button
       size="lg"
       class="mb-6 w-full"
       href={resolve("/sessions/[watchSessionId]", {
-        watchSessionId: data.activeWatchSessionId,
+        watchSessionId: data.activeWatchSession.id,
       })}
     >
-      Continue the session
+      {data.activeWatchSession.mine === "invited"
+        ? "Join the session"
+        : "Continue the session"}
     </Button>
   {/if}
 

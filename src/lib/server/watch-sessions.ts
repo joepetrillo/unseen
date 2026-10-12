@@ -133,7 +133,8 @@ interface Change {
  * Starts a session in a group, with the user as host and only active
  * participant. `invitedUserIds` (other group members, "who's watching
  * tonight") get invited participations: they count once they accept
- * (joinWatchSession). The browser picks the session's ID, so a retried start
+ * (joinWatchSession). When the start replaces a session, invitees who were
+ * participating in it join right away. The browser picks the session's ID, so a retried start
  * lands on the same session. If the group already has an active session, the
  * start must name it in `replacedWatchSessionId` (Change filters): it's
  * closed in the same transaction, recording its matches.
@@ -165,6 +166,9 @@ export function startWatchSession(
     invitedUserIds,
   };
   return runWatchAction(db, action, async (tx) => {
+    // People already in the session being replaced (Change filters): they
+    // agreed to watch tonight, so they stay in without accepting again.
+    let carriedOver = new Set<string>();
     // The group's row lock queues starts in one group, so two can't both
     // see "no active session". The partial unique index backs it up.
     const [group] = await tx
@@ -194,6 +198,7 @@ export function startWatchSession(
         throw new Refusal("session_active");
       }
       await requireHost(tx, active.id, userId);
+      carriedOver = await activeUserIds(tx, active.id);
       await closeWatchSession(tx, active.id, groupId);
     }
 
@@ -228,12 +233,13 @@ export function startWatchSession(
       if (members.length !== invitedUserIds.length) {
         throw new Refusal("not_found");
       }
-      // joined_at stays null: invited, not participating until they accept.
+      // A null joined_at means invited: not participating until they accept.
       await tx.insert(participants).values(
         invitedUserIds.map((id) => ({
           watchSessionId,
           userId: id,
           role: "guest" as const,
+          joinedAt: carriedOver.has(id) ? sql`now()` : null,
         }))
       );
     }
@@ -445,11 +451,82 @@ export async function getWatchSession(
     .where(eq(watchSessions.id, watchSessionId));
   if (session === undefined) return null;
 
-  const [participation] = await db
-    .select({ id: participants.id, role: participants.role })
+  const [mine] = await db
+    .select({
+      id: participants.id,
+      role: participants.role,
+      joinedAt: participants.joinedAt,
+    })
     .from(participants)
-    .where(and(activeIn(watchSessionId), eq(participants.userId, userId)));
-  return { ...session, participation: participation ?? null };
+    .where(
+      and(
+        eq(participants.watchSessionId, watchSessionId),
+        eq(participants.userId, userId),
+        isNull(participants.removedAt)
+      )
+    );
+  return {
+    ...session,
+    /** The user's active participation, if any. */
+    participation:
+      mine?.joinedAt == null ? null : { id: mine.id, role: mine.role },
+    /** The user's invitation, if they haven't accepted it yet. */
+    invitation: mine?.joinedAt === null ? { id: mine.id } : null,
+  };
+}
+
+/**
+ * Everyone in the session or invited to it (not removed), with their group
+ * nickname: the host first, then others by when they joined, then the
+ * people who haven't accepted yet.
+ */
+export async function listParticipants(
+  db: Db | Transaction,
+  watchSessionId: string
+): Promise<
+  {
+    participationId: string;
+    userId: string;
+    nickname: string;
+    role: "host" | "guest";
+    joined: boolean;
+  }[]
+> {
+  const rows = await db
+    .select({
+      participationId: participants.id,
+      userId: participants.userId,
+      // Null once someone leaves the group; stage 8 removes them from the
+      // session when that happens.
+      nickname: groupMembers.nickname,
+      role: participants.role,
+      joinedAt: participants.joinedAt,
+    })
+    .from(participants)
+    .innerJoin(watchSessions, eq(watchSessions.id, participants.watchSessionId))
+    .leftJoin(
+      groupMembers,
+      and(
+        eq(groupMembers.groupId, watchSessions.groupId),
+        eq(groupMembers.userId, participants.userId)
+      )
+    )
+    .where(
+      and(
+        eq(participants.watchSessionId, watchSessionId),
+        isNull(participants.removedAt)
+      )
+    )
+    .orderBy(
+      sql`${participants.role} = 'host' desc`,
+      sql`${participants.joinedAt} asc nulls last`,
+      asc(groupMembers.nickname)
+    );
+  return rows.map(({ joinedAt, nickname, ...row }) => ({
+    ...row,
+    nickname: nickname ?? "Someone who left",
+    joined: joinedAt !== null,
+  }));
 }
 
 /** The group's active session, if any. */
@@ -839,6 +916,17 @@ async function lockOwnParticipation(
     throw new Refusal("not_found");
   }
   return row;
+}
+
+async function activeUserIds(
+  tx: Transaction,
+  watchSessionId: string
+): Promise<Set<string>> {
+  const rows = await tx
+    .select({ userId: participants.userId })
+    .from(participants)
+    .where(activeIn(watchSessionId));
+  return new Set(rows.map((row) => row.userId));
 }
 
 async function requireHost(

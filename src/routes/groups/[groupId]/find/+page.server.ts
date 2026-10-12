@@ -9,6 +9,7 @@ import { watchRefusal } from "#lib/server/watch-session-forms.ts";
 import {
   getActiveWatchSessionId,
   getWatchSession,
+  listParticipants,
   startWatchSession,
 } from "#lib/server/watch-sessions.ts";
 import { watchFiltersSchema } from "#lib/watch-fields.ts";
@@ -37,10 +38,31 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
       ? active
       : null;
 
+  // Everyone else in the group, to pick who's watching. A new session
+  // starts with all of them ticked (the usual movie night); Change filters
+  // starts with the current session's people.
+  const others = group.members.filter((member) => member.userId !== user.id);
+  const invited =
+    replacing === null
+      ? others.map((member) => member.userId)
+      : (await listParticipants(db, replacing.id))
+          .filter((person) => person.role !== "host")
+          .map((person) => person.userId);
+
   return {
     group: { id: group.id, name: group.name },
+    members: others.map(({ userId, nickname }) => ({ userId, nickname })),
+    invited,
     genres: await db.query.genres.findMany({ orderBy: { name: "asc" } }),
-    active: active === null ? null : { id: active.id, isHost },
+    active:
+      active === null
+        ? null
+        : {
+            id: active.id,
+            isHost,
+            // Someone else's session you're in or invited to: go there.
+            isMine: active.participation !== null || active.invitation !== null,
+          },
     replacing:
       replacing === null
         ? null
@@ -64,6 +86,13 @@ const startSchema = z
     watchSessionId: z.uuid(),
     // The active session this start replaces (Change filters), if any.
     replace: z.union([z.literal(""), z.uuid()]).default(""),
+    // One checkbox per member, so nothing, one value, or a list. The server
+    // checks they're members; Better Auth's IDs are letters and digits.
+    invitedUserIds: z
+      .union([z.string(), z.array(z.string())])
+      .default([])
+      .transform((value) => (Array.isArray(value) ? value : [value]))
+      .pipe(z.array(z.string().regex(/^[\w-]{1,64}$/)).max(100)),
   })
   .and(watchFiltersSchema);
 
@@ -75,7 +104,8 @@ export const actions = {
     const form = await readForm(request, startSchema);
     if (!form.ok) return form.failure;
 
-    const { actionId, watchSessionId, replace, ...filters } = form.data;
+    const { actionId, watchSessionId, replace, invitedUserIds, ...filters } =
+      form.data;
     const outcome = await startWatchSession(db, {
       actionId,
       userId: user.id,
@@ -83,7 +113,7 @@ export const actions = {
       watchSessionId,
       filters,
       replacedWatchSessionId: replace === "" ? null : replace,
-      invitedUserIds: [],
+      invitedUserIds,
     });
     // Someone in the group started one first (both saw "Find a movie"):
     // reload this page, which now shows the session that's going.

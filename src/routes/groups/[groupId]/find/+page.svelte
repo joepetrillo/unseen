@@ -31,6 +31,10 @@
   let minYear = $derived(initial.minYear);
   let maxYear = $derived(initial.maxYear);
   let genreIds = $derived([...initial.genreIds]);
+  let invitedUserIds = $derived([...data.invited]);
+  // Checkboxes styled as chips (genres and people).
+  const chip =
+    "cursor-pointer rounded-4xl border px-4 py-2 text-sm font-medium transition-colors select-none has-checked:border-primary has-checked:bg-primary has-checked:text-primary-foreground has-focus-visible:ring-[3px] has-focus-visible:ring-ring/50";
   // The browser names the new session, so a retried start lands on it.
   const start = new ActionForm({
     newIds: ["watchSessionId"],
@@ -56,6 +60,9 @@
         <Card.Description>
           {#if data.active.isHost}
             Pick up where you left off, or start over with new filters.
+          {:else if data.active.isMine}
+            Someone in {data.group.name} started one with you in it. A group runs
+            one session at a time.
           {:else}
             Someone in {data.group.name} started one. A group runs one session at
             a time.
@@ -80,6 +87,15 @@
           >
             Start a new one
           </Button>
+        {:else if data.active.isMine}
+          <Button
+            size="lg"
+            href={resolve("/sessions/[watchSessionId]", {
+              watchSessionId: data.active.id,
+            })}
+          >
+            Go to the session
+          </Button>
         {:else}
           <Button
             size="lg"
@@ -97,6 +113,31 @@
       <!-- All optional: an untouched form starts with no filters. The
            inputs and selected genres show what's on. -->
       <Field.Group>
+        {#if data.members.length > 0}
+          <Field.Set>
+            <Field.Legend variant="label">Who's watching</Field.Legend>
+            <Field.Description>
+              {data.replacing === null
+                ? "You're in. The others join when they accept."
+                : "People in this session stay in. Anyone new joins when they accept."}
+            </Field.Description>
+            <div class="flex flex-wrap gap-2">
+              {#each data.members as member (member.userId)}
+                <label class={chip}>
+                  <input
+                    class="sr-only"
+                    type="checkbox"
+                    name="invitedUserIds"
+                    value={member.userId}
+                    bind:group={invitedUserIds}
+                  />
+                  {member.nickname}
+                </label>
+              {/each}
+            </div>
+          </Field.Set>
+        {/if}
+
         <Field.Field>
           <Field.Label for="runtime">Length</Field.Label>
           <NativeSelect
@@ -143,12 +184,10 @@
         <Field.Set>
           <Field.Legend variant="label">Genres</Field.Legend>
           <Field.Description>Pick any; none means all.</Field.Description>
-          <!-- Checkboxes styled as chips: each ticked box sends genreIds. -->
+          <!-- Each ticked box sends genreIds. -->
           <div class="flex flex-wrap gap-2">
             {#each data.genres as genre (genre.id)}
-              <label
-                class="cursor-pointer rounded-4xl border px-4 py-2 text-sm font-medium transition-colors select-none has-checked:border-primary has-checked:bg-primary has-checked:text-primary-foreground has-focus-visible:ring-[3px] has-focus-visible:ring-ring/50"
-              >
+              <label class={chip}>
                 <input
                   class="sr-only"
                   type="checkbox"
