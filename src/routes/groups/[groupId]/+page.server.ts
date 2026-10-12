@@ -15,7 +15,10 @@ import {
   setNickname,
 } from "#lib/server/groups.ts";
 import { requireUser } from "#lib/server/require-user.ts";
-import { getActiveWatchSessionId } from "#lib/server/watch-sessions.ts";
+import {
+  getActiveWatchSessionId,
+  getWatchSession,
+} from "#lib/server/watch-sessions.ts";
 
 import type { Actions, PageServerLoad, RequestEvent } from "./$types";
 
@@ -28,10 +31,25 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
   // Same answer for "no such group" and "not your group", so a stranger
   // can't learn which IDs exist.
   if (group === null) error(404, "Group not found.");
+  const activeId = await getActiveWatchSessionId(db, group.id);
+  const active =
+    activeId === null ? null : await getWatchSession(db, activeId, user.id);
   return {
     group,
     inviteUrl: `${url.origin}/join/${group.inviteCode}`,
-    activeWatchSessionId: await getActiveWatchSessionId(db, group.id),
+    activeWatchSession:
+      active === null
+        ? null
+        : {
+            id: active.id,
+            // Yours to continue, an invitation to accept, or other people's.
+            mine:
+              active.participation !== null
+                ? ("participating" as const)
+                : active.invitation !== null
+                  ? ("invited" as const)
+                  : ("outside" as const),
+          },
   };
 };
 

@@ -424,6 +424,8 @@ export const actionType = pgEnum("action_type", [
   "group_set_nickname",
   "watch_session_start",
   "watch_session_end",
+  "watch_session_join",
+  "watch_session_filters",
   "watch_answer_seen",
   "watch_answer_not_seen",
   "watch_answer_undo",
@@ -460,6 +462,8 @@ export const actions = pgTable(
     // The active session a start replaces (Change filters, later Start fresh).
     // Named explicitly so a stale screen can't end a newer session.
     replacedWatchSessionId: uuid("replaced_watch_session_id"),
+    // The members a start invites ("who's watching tonight"), without the host.
+    invitedUserIds: text("invited_user_ids").array(),
     // Not an input: set on an answer when an undo reverses it, to the undo's
     // ID. An answer with this set is off its owner's undo stack for good.
     undoneByActionId: uuid("undone_by_action_id"),

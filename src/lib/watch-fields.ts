@@ -105,14 +105,15 @@ export function formatRuntime(minutes: number): string {
 }
 
 /** A movie as the session screens show it. */
-export interface MovieCard {
-  id: number;
-  title: string;
-  year: number | null;
-  runtime: number | null;
-  posterPath: string | null;
-  genres: string[];
-}
+export const movieCardSchema = z.object({
+  id: z.int(),
+  title: z.string(),
+  year: z.int().nullable(),
+  runtime: z.int().nullable(),
+  posterPath: z.string().nullable(),
+  genres: z.array(z.string()),
+});
+export type MovieCard = z.infer<typeof movieCardSchema>;
 
 /** TMDB's US watch page: where TMDB lists streaming, rental, and purchase. */
 export function whereToWatchUrl(movieId: number): string {
@@ -121,3 +122,35 @@ export function whereToWatchUrl(movieId: number): string {
 
 /** At this many matches the session suggests reviewing the shortlist. */
 export const REVIEW_PROMPT_AT = 5;
+
+/**
+ * What the deck shows, read at one moment (one database snapshot), so the
+ * fingerprint describes exactly these cards and counts. A schema because the
+ * poll's reply arrives as JSON the browser checks (watch-session-updates.ts).
+ */
+export const deckStateSchema = z.object({
+  /** The top cards to deal, skipping what the browser already holds. */
+  cards: z.array(movieCardSchema),
+  matchCount: z.int(),
+  canUndo: z.boolean(),
+  /** Changes whenever anything the deck shows could have (spec section 5). */
+  fingerprint: z.string(),
+  /**
+   * Set only when you have nothing left to answer: the nicknames of others
+   * who still have movies to answer. Empty means nobody does: the filtered
+   * pool is used up.
+   */
+  waitingOn: z.array(z.string()).nullable(),
+  /** The session's filters, described (the host can change them). */
+  filters: z.string(),
+});
+export type DeckState = z.infer<typeof deckStateSchema>;
+
+/** The poll's reply (see #lib/watch-session-updates.ts). */
+export const pollReplySchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("unchanged") }),
+  z.object({ status: z.literal("changed"), state: deckStateSchema }),
+  // The session ended, or you're no longer in it: the page reloads.
+  z.object({ status: z.literal("ended") }),
+]);
+export type PollReply = z.infer<typeof pollReplySchema>;

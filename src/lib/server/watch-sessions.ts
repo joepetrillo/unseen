@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import {
   and,
   asc,
@@ -33,12 +35,19 @@ import {
   movieGenres,
   movies,
   seenMovies,
+  users,
   watchSessionAnswers,
   watchSessionParticipants,
   watchSessions,
 } from "#lib/server/db/schema.ts";
 import { confirmSeen, withdrawSeen } from "#lib/server/seen-list.ts";
-import type { MovieCard, WatchFilters } from "#lib/watch-fields.ts";
+import {
+  type DeckState,
+  describeFilters,
+  type MovieCard,
+  type PollReply,
+  type WatchFilters,
+} from "#lib/watch-fields.ts";
 
 // The only module that changes watch sessions, their participants, answers,
 // and the group's past matches. Every change is an action (applied at most
@@ -112,7 +121,7 @@ async function runWatchAction(
 const participants = watchSessionParticipants;
 const answers = watchSessionAnswers;
 
-// Joined and not removed. Invited participations (stage 8) don't count yet.
+// Joined and not removed. Invited participations don't count until accepted.
 function activeIn(watchSessionId: string): SQL {
   return sql`(${participants.watchSessionId} = ${watchSessionId} and ${participants.joinedAt} is not null and ${participants.removedAt} is null)`;
 }
@@ -130,11 +139,14 @@ interface Change {
 }
 
 /**
- * Starts a session in a group, with the user as host and only participant
- * (solo; stage 7 adds others). The browser picks the session's ID, so a
- * retried start lands on the same session. If the group already has an
- * active session, the start must name it in `replacedWatchSessionId` (Change
- * filters): it's closed in the same transaction, recording its matches.
+ * Starts a session in a group, with the user as host and only active
+ * participant. `invitedUserIds` (other group members, "who's watching
+ * tonight") get invited participations: they count once they accept
+ * (joinWatchSession). When the start replaces a session, invitees who were
+ * participating in it join right away. The browser picks the session's ID, so a retried start
+ * lands on the same session. If the group already has an active session, the
+ * start must name it in `replacedWatchSessionId` (Change filters): it's
+ * closed in the same transaction, recording its matches.
  */
 export function startWatchSession(
   db: Db,
@@ -143,10 +155,15 @@ export function startWatchSession(
     watchSessionId: string;
     filters: WatchFilters;
     replacedWatchSessionId: string | null;
+    invitedUserIds: readonly string[];
   }
 ): Promise<WatchSessionOutcome> {
   const { actionId, userId, groupId, watchSessionId, filters } = change;
   const { replacedWatchSessionId } = change;
+  // Sorted and without duplicates (or the host), so a retry compares equal.
+  const invitedUserIds = [...new Set(change.invitedUserIds)]
+    .filter((id) => id !== userId)
+    .sort();
   const action: Action = {
     id: actionId,
     userId,
@@ -155,8 +172,12 @@ export function startWatchSession(
     watchSessionId,
     ...filters,
     replacedWatchSessionId,
+    invitedUserIds,
   };
   return runWatchAction(db, action, async (tx) => {
+    // People already in the session being replaced (Change filters): they
+    // agreed to watch tonight, so they stay in without accepting again.
+    let carriedOver = new Set<string>();
     // The group's row lock queues starts in one group, so two can't both
     // see "no active session". The partial unique index backs it up.
     const [group] = await tx
@@ -186,6 +207,7 @@ export function startWatchSession(
         throw new Refusal("session_active");
       }
       await requireHost(tx, active.id, userId);
+      carriedOver = await activeUserIds(tx, active.id);
       await closeWatchSession(tx, active.id, groupId);
     }
 
@@ -203,6 +225,97 @@ export function startWatchSession(
       role: "host",
       joinedAt: sql`now()`,
     });
+
+    if (invitedUserIds.length > 0) {
+      // Only current members can be invited. Membership changes take the
+      // group's row lock, which this transaction holds, so it can't change
+      // between this check and the insert.
+      const members = await tx
+        .select({ userId: groupMembers.userId })
+        .from(groupMembers)
+        .where(
+          and(
+            eq(groupMembers.groupId, groupId),
+            inArray(groupMembers.userId, invitedUserIds)
+          )
+        );
+      if (members.length !== invitedUserIds.length) {
+        throw new Refusal("not_found");
+      }
+      // A null joined_at means invited: not participating until they accept.
+      await tx.insert(participants).values(
+        invitedUserIds.map((id) => ({
+          watchSessionId,
+          userId: id,
+          role: "guest" as const,
+          joinedAt: carriedOver.has(id) ? sql`now()` : null,
+        }))
+      );
+    }
+  });
+}
+
+/**
+ * Accepts an invitation: the participation becomes active, so the person's
+ * answers and seen list count from now on. Accepting one that's already
+ * active (from another device) changes nothing.
+ */
+export function joinWatchSession(
+  db: Db,
+  change: Change & { watchSessionId: string; participationId: string }
+): Promise<WatchSessionOutcome> {
+  const { actionId, userId, watchSessionId, participationId } = change;
+  const action: Action = {
+    id: actionId,
+    userId,
+    type: "watch_session_join",
+    watchSessionId,
+    participationId,
+  };
+  return runWatchAction(db, action, async (tx) => {
+    const row = await lockOwnParticipation(
+      tx,
+      participationId,
+      userId,
+      watchSessionId
+    );
+    if (row.removedAt !== null) throw new Refusal("not_participating");
+    if (row.closedAt !== null) throw new Refusal("session_closed");
+    if (row.joinedAt !== null) return;
+    await tx
+      .update(participants)
+      .set({ joinedAt: sql`now()` })
+      .where(eq(participants.id, participationId));
+    await notifyWatchSessionChanged(tx, watchSessionId);
+  });
+}
+
+/**
+ * Host only: Change filters. The session, its people, and its answers stay,
+ * so its matches do too (they come from answers, never from filters); only
+ * the movies dealt from now on change. Cards already on screen stay.
+ */
+export function changeWatchSessionFilters(
+  db: Db,
+  change: Change & { watchSessionId: string; filters: WatchFilters }
+): Promise<WatchSessionOutcome> {
+  const { actionId, userId, watchSessionId, filters } = change;
+  const action: Action = {
+    id: actionId,
+    userId,
+    type: "watch_session_filters",
+    watchSessionId,
+    ...filters,
+  };
+  return runWatchAction(db, action, async (tx) => {
+    const session = await lockSessionForMember(tx, watchSessionId, userId);
+    if (session.closedAt !== null) throw new Refusal("session_closed");
+    await requireHost(tx, watchSessionId, userId);
+    await tx
+      .update(watchSessions)
+      .set(filters)
+      .where(eq(watchSessions.id, watchSessionId));
+    await notifyWatchSessionChanged(tx, watchSessionId);
   });
 }
 
@@ -229,7 +342,8 @@ export function endWatchSession(
 /**
  * Records an answer. Seen also puts the movie on the user's seen list (and
  * replaces an earlier Not seen: "Actually, I've seen this"). A Not seen on a
- * movie someone in the session has seen is ignored: it's already out.
+ * movie someone has seen is still recorded: it can't match, but Undo takes
+ * it back like any other answer, and it counts if they withdraw their Seen.
  */
 export function answerMovie(
   db: Db,
@@ -255,7 +369,7 @@ export function answerMovie(
     if (answer === "seen") {
       await setAnswer(tx, participationId, movieId, "seen");
       await confirmSeen(tx, { actionId, userId, movieId });
-    } else if (!(await seenBySomeone(tx, watchSessionId, movieId))) {
+    } else {
       await setAnswer(tx, participationId, movieId, "not_seen");
     }
     await notifyWatchSessionChanged(tx, watchSessionId);
@@ -376,11 +490,82 @@ export async function getWatchSession(
     .where(eq(watchSessions.id, watchSessionId));
   if (session === undefined) return null;
 
-  const [participation] = await db
-    .select({ id: participants.id, role: participants.role })
+  const [mine] = await db
+    .select({
+      id: participants.id,
+      role: participants.role,
+      joinedAt: participants.joinedAt,
+    })
     .from(participants)
-    .where(and(activeIn(watchSessionId), eq(participants.userId, userId)));
-  return { ...session, participation: participation ?? null };
+    .where(
+      and(
+        eq(participants.watchSessionId, watchSessionId),
+        eq(participants.userId, userId),
+        isNull(participants.removedAt)
+      )
+    );
+  return {
+    ...session,
+    /** The user's active participation, if any. */
+    participation:
+      mine?.joinedAt == null ? null : { id: mine.id, role: mine.role },
+    /** The user's invitation, if they haven't accepted it yet. */
+    invitation: mine?.joinedAt === null ? { id: mine.id } : null,
+  };
+}
+
+/**
+ * Everyone in the session or invited to it (not removed), with their group
+ * nickname: the host first, then others by when they joined, then the
+ * people who haven't accepted yet.
+ */
+export async function listParticipants(
+  db: Db | Transaction,
+  watchSessionId: string
+): Promise<
+  {
+    participationId: string;
+    userId: string;
+    nickname: string;
+    role: "host" | "guest";
+    joined: boolean;
+  }[]
+> {
+  const rows = await db
+    .select({
+      participationId: participants.id,
+      userId: participants.userId,
+      // Null once someone leaves the group; stage 8 removes them from the
+      // session when that happens.
+      nickname: groupMembers.nickname,
+      role: participants.role,
+      joinedAt: participants.joinedAt,
+    })
+    .from(participants)
+    .innerJoin(watchSessions, eq(watchSessions.id, participants.watchSessionId))
+    .leftJoin(
+      groupMembers,
+      and(
+        eq(groupMembers.groupId, watchSessions.groupId),
+        eq(groupMembers.userId, participants.userId)
+      )
+    )
+    .where(
+      and(
+        eq(participants.watchSessionId, watchSessionId),
+        isNull(participants.removedAt)
+      )
+    )
+    .orderBy(
+      sql`${participants.role} = 'host' desc`,
+      sql`${participants.joinedAt} asc nulls last`,
+      asc(groupMembers.nickname)
+    );
+  return rows.map(({ joinedAt, nickname, ...row }) => ({
+    ...row,
+    nickname: nickname ?? "Someone who left",
+    joined: joinedAt !== null,
+  }));
 }
 
 /** The group's active session, if any. */
@@ -409,7 +594,7 @@ export async function getActiveWatchSessionId(
  * then TMDB vote count, then movie ID.
  */
 export async function dealCards(
-  db: Db,
+  db: Db | Transaction,
   {
     watchSessionId,
     participationId,
@@ -547,9 +732,181 @@ export async function listMatches(
   return withGenres(db, rows);
 }
 
+/** How many matches the session has (the deck shows only the count). */
+export async function countMatches(
+  db: Db | Transaction,
+  watchSessionId: string
+): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)`.mapWith(Number) })
+    .from(matchedMovies(db, watchSessionId).as("matched"));
+  return row?.count ?? 0;
+}
+
+interface DeckRequest {
+  watchSessionId: string;
+  participationId: string;
+  /** Cards the browser holds (on screen or waiting to save): not dealt. */
+  exclude: readonly number[];
+}
+
+/**
+ * The deck's state for a participation, from one snapshot. Callers have
+ * already checked the participation is the user's.
+ */
+export function readDeckState(
+  db: Db,
+  request: DeckRequest
+): Promise<DeckState> {
+  return db.transaction((tx) => deckStateIn(tx, request), SNAPSHOT);
+}
+
+/**
+ * The poll (spec section 5): a tiny "unchanged" when the fingerprint the
+ * browser sends still matches, otherwise the deck's state, from one
+ * snapshot. Reads only: polling never counts as activity.
+ */
+export function pollWatchSession(
+  db: Db,
+  request: DeckRequest & { userId: string; since: string }
+): Promise<PollReply> {
+  const { userId, watchSessionId, participationId, since } = request;
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({
+        watchSessionId: participants.watchSessionId,
+        userId: participants.userId,
+        joinedAt: participants.joinedAt,
+        removedAt: participants.removedAt,
+        closedAt: watchSessions.closedAt,
+      })
+      .from(participants)
+      .innerJoin(
+        watchSessions,
+        eq(watchSessions.id, participants.watchSessionId)
+      )
+      .where(eq(participants.id, participationId));
+    if (
+      row?.userId !== userId ||
+      row.watchSessionId !== watchSessionId ||
+      row.joinedAt === null ||
+      row.removedAt !== null ||
+      row.closedAt !== null
+    ) {
+      return { status: "ended" };
+    }
+    if ((await fingerprintIn(tx, watchSessionId)) === since) {
+      return { status: "unchanged" };
+    }
+    return { status: "changed", state: await deckStateIn(tx, request) };
+  }, SNAPSHOT);
+}
+
+// Every read in the transaction sees the database as of its first query, so
+// the fingerprint and the state it describes always agree.
+const SNAPSHOT = {
+  isolationLevel: "repeatable read",
+  accessMode: "read only",
+} as const;
+
+/** "Under 2 hours · Comedy, Drama · 1990–2009", for the session's header. */
+export async function describeSessionFilters(
+  db: Db | Transaction,
+  filters: WatchFilters
+): Promise<string> {
+  const names =
+    filters.genreIds.length === 0
+      ? []
+      : await db
+          .select({ id: genres.id, name: genres.name })
+          .from(genres)
+          .where(inArray(genres.id, filters.genreIds));
+  return describeFilters(
+    filters,
+    new Map(names.map((genre) => [genre.id, genre.name]))
+  );
+}
+
+async function deckStateIn(
+  tx: Transaction,
+  { watchSessionId, participationId, exclude }: DeckRequest
+): Promise<DeckState> {
+  const fingerprint = await fingerprintIn(tx, watchSessionId);
+  // The host can change them mid-session, so they come with every state.
+  const [session] = await tx
+    .select({
+      maxRuntime: watchSessions.maxRuntime,
+      minYear: watchSessions.minYear,
+      maxYear: watchSessions.maxYear,
+      genreIds: watchSessions.genreIds,
+    })
+    .from(watchSessions)
+    .where(eq(watchSessions.id, watchSessionId));
+  const filters =
+    session === undefined ? "" : await describeSessionFilters(tx, session);
+  const cards = await dealCards(tx, {
+    watchSessionId,
+    participationId,
+    exclude,
+  });
+  const matchCount = await countMatches(tx, watchSessionId);
+  const undoable = await canUndo(tx, participationId);
+
+  // Nothing left to deal you (beyond the cards you hold): who still has
+  // movies to answer? Their deck is the same pool minus their own answers,
+  // so ask it for one card each.
+  let waitingOn: string[] | null = null;
+  if (cards.length === 0) {
+    waitingOn = [];
+    for (const person of await listParticipants(tx, watchSessionId)) {
+      if (!person.joined || person.participationId === participationId) {
+        continue;
+      }
+      const next = await dealCards(tx, {
+        watchSessionId,
+        participationId: person.participationId,
+        limit: 1,
+      });
+      if (next.length > 0) waitingOn.push(person.nickname);
+    }
+  }
+  return {
+    cards,
+    matchCount,
+    canUndo: undoable,
+    fingerprint,
+    waitingOn,
+    filters,
+  };
+}
+
+// A short digest of the session's revision and each active participant's
+// seen-list version (spec section 5). Seen-list changes bump only the user's
+// counter, so every session they're in notices without writing to them.
+async function fingerprintIn(
+  tx: Transaction,
+  watchSessionId: string
+): Promise<string> {
+  const [session] = await tx
+    .select({ revision: watchSessions.revision })
+    .from(watchSessions)
+    .where(eq(watchSessions.id, watchSessionId));
+  const [seen] = await tx
+    .select({
+      versions: sql<
+        string | null
+      >`string_agg(${participants.id}::text || ':' || ${users.seenVersion}::text, ',' order by ${participants.id})`,
+    })
+    .from(participants)
+    .innerJoin(users, eq(users.id, participants.userId))
+    .where(activeIn(watchSessionId));
+  const source = `${String(session?.revision ?? "")}|${seen?.versions ?? ""}`;
+  return createHash("sha256").update(source).digest("base64url").slice(0, 16);
+}
+
 /** One movie as a card (an undone answer's movie, shown again). */
 export async function getCard(
-  db: Db,
+  db: Db | Transaction,
   movieId: number
 ): Promise<MovieCard | null> {
   const rows = await db
@@ -568,7 +925,7 @@ export async function getCard(
 
 /** Whether the participation has an answer left to undo. */
 export async function canUndo(
-  db: Db,
+  db: Db | Transaction,
   participationId: string
 ): Promise<boolean> {
   const [last] = await latestAnswers(db, participationId).limit(1);
@@ -673,21 +1030,6 @@ async function setAnswer(
     });
 }
 
-// Whether any active participant has the movie on their seen list.
-async function seenBySomeone(
-  tx: Transaction,
-  watchSessionId: string,
-  movieId: number
-): Promise<boolean> {
-  const [row] = await tx
-    .select({ one: sql`1` })
-    .from(seenMovies)
-    .innerJoin(participants, eq(participants.userId, seenMovies.userId))
-    .where(and(activeIn(watchSessionId), eq(seenMovies.movieId, movieId)))
-    .limit(1);
-  return row !== undefined;
-}
-
 /**
  * Locks the session's row until the transaction ends, if the user is in its
  * group. Every change to a session takes this lock, so they queue.
@@ -727,6 +1069,30 @@ async function lockParticipation(
   userId: string,
   watchSessionId: string
 ): Promise<void> {
+  const row = await lockOwnParticipation(
+    tx,
+    participationId,
+    userId,
+    watchSessionId
+  );
+  if (row.joinedAt === null || row.removedAt !== null) {
+    throw new Refusal("not_participating");
+  }
+  if (row.closedAt !== null) throw new Refusal("session_closed");
+}
+
+// The user's participation in the session the request names, with the
+// session's row locked. Callers check its status.
+async function lockOwnParticipation(
+  tx: Transaction,
+  participationId: string,
+  userId: string,
+  watchSessionId: string
+): Promise<{
+  joinedAt: Date | null;
+  removedAt: Date | null;
+  closedAt: Date | null;
+}> {
   const [row] = await tx
     .select({
       watchSessionId: participants.watchSessionId,
@@ -745,10 +1111,18 @@ async function lockParticipation(
   if (row?.userId !== userId || row.watchSessionId !== watchSessionId) {
     throw new Refusal("not_found");
   }
-  if (row.joinedAt === null || row.removedAt !== null) {
-    throw new Refusal("not_participating");
-  }
-  if (row.closedAt !== null) throw new Refusal("session_closed");
+  return row;
+}
+
+async function activeUserIds(
+  tx: Transaction,
+  watchSessionId: string
+): Promise<Set<string>> {
+  const rows = await tx
+    .select({ userId: participants.userId })
+    .from(participants)
+    .where(activeIn(watchSessionId));
+  return new Set(rows.map((row) => row.userId));
 }
 
 async function requireHost(

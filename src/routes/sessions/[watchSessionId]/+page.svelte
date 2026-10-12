@@ -34,6 +34,15 @@
     data.view === "deck" ? new Deck(data.participationId, data.deck) : null
   );
 
+  // Follow other people's answers while the deck is on screen. An effect is
+  // the right tool here: polling is an outside process that must start with
+  // the deck and stop when it goes (like useEffect's cleanup in React, or
+  // ngOnDestroy). When the session ends for you, reload into the ended view.
+  $effect(() => {
+    if (deck === null) return;
+    return deck.connect(data.session.id, () => void refreshAll());
+  });
+
   let groupHref = $derived(
     resolve("/groups/[groupId]", { groupId: data.session.groupId })
   );
@@ -43,8 +52,8 @@
     })
   );
   let changeFiltersHref = $derived(
-    resolve(`/groups/[groupId]/find?replace=${data.session.id}`, {
-      groupId: data.session.groupId,
+    resolve("/sessions/[watchSessionId]/filters", {
+      watchSessionId: data.session.id,
     })
   );
 
@@ -69,11 +78,18 @@
     });
   });
 
+  const join = new ActionForm({ scope: () => data.session.id });
   const end = new ActionForm({
     scope: () => data.session.id,
     confirm: () =>
-      "End this session? Its matches are saved and come up last next time.",
+      "End this session for everyone? Its matches stay on its page.",
   });
+
+  // "Sam", "Sam and Alex", "Sam, Alex, and Jo".
+  const names = new Intl.ListFormat("en", { type: "conjunction" });
+  function listNames(people: string[]): string {
+    return names.format(people);
+  }
 
   function details(movie: MovieCard): string {
     return [
@@ -116,8 +132,9 @@
         <Badge>{deck.matchCount}</Badge>
       </Button>
     </header>
+    <!-- From the deck: the host can change filters mid-session. -->
     <p class="mt-1 truncate text-sm text-muted-foreground">
-      {data.session.filters}
+      {deck.filters}
     </p>
 
     <main class="flex min-h-0 flex-1 flex-col items-center justify-center py-4">
@@ -171,10 +188,22 @@
           </h1>
           <p class="mt-1 text-muted-foreground">{details(deck.card)}</p>
         </div>
-      {:else if !deck.exhausted}
+      {:else if !deck.exhausted || deck.waitingOn === null}
         <div class="flex items-center gap-3 text-muted-foreground">
           <Spinner />
           Dealing more movies…
+        </div>
+      {:else if deck.waitingOn.length > 0}
+        <!-- Never suggest other filters here: the movies exist, they just
+             need other people's answers. -->
+        <div class="text-center" aria-live="polite">
+          <p class="text-lg font-semibold">You're caught up</p>
+          <p class="mt-2 text-muted-foreground">
+            Waiting for {listNames(deck.waitingOn)} to answer.
+          </p>
+          <div class="mt-6 flex flex-col gap-3">
+            <Button size="lg" href={shortlistHref}>See the matches</Button>
+          </div>
         </div>
       {:else}
         <div class="text-center">
@@ -182,13 +211,17 @@
             That's every movie that fits these filters.
           </p>
           <p class="mt-2 text-muted-foreground">
-            Look over the matches, or change the filters for more.
+            {data.session.isHost
+              ? "Look over the matches, or change the filters for more. The matches stay."
+              : "Look over the matches. The host can change the filters for more."}
           </p>
           <div class="mt-6 flex flex-col gap-3">
             <Button size="lg" href={shortlistHref}>See the matches</Button>
-            <Button variant="ghost" href={changeFiltersHref}>
-              Change filters
-            </Button>
+            {#if data.session.isHost}
+              <Button variant="ghost" href={changeFiltersHref}>
+                Change filters
+              </Button>
+            {/if}
           </div>
         </div>
       {/if}
@@ -219,6 +252,8 @@
             <span class="text-destructive">{deck.undoError}</span>
           {:else if deck.saving}
             Saving…
+          {:else if deck.offline}
+            Can't reach Vunu. Trying again…
           {/if}
         </p>
         {#if deck.error !== null}
@@ -253,11 +288,12 @@
         {/each}
       </div>
 
-      <div class="flex items-center justify-center gap-2 text-sm">
-        <Button variant="link" size="sm" href={changeFiltersHref}>
-          Change filters
-        </Button>
-        {#if data.session.isHost}
+      <!-- Host only: new filters change what everyone is dealt next. -->
+      {#if data.session.isHost}
+        <div class="flex items-center justify-center gap-2 text-sm">
+          <Button variant="link" size="sm" href={changeFiltersHref}>
+            Change filters
+          </Button>
           <span class="text-muted-foreground" aria-hidden="true">·</span>
           <!-- Ending waits for every answer to be saved, or they'd miss the
                matches the end records (and then be refused). -->
@@ -281,8 +317,8 @@
               {end.saving ? "Ending…" : "End session"}
             </Button>
           </form>
-        {/if}
-      </div>
+        </div>
+      {/if}
       {#if end.error}
         <p class="text-center text-sm text-destructive" role="alert">
           {end.error}
@@ -301,15 +337,68 @@
     {:else}
       <p class="text-muted-foreground">It ended without any matches.</p>
     {/if}
-    <Button
-      class="mt-8 w-full"
-      size="lg"
-      href={resolve("/groups/[groupId]/find", {
-        groupId: data.session.groupId,
-      })}
-    >
-      Find a movie
-    </Button>
+    <!-- The host may have started a new one ("Start a new one"). -->
+    {#if data.current !== null}
+      <Button
+        class="mt-8 w-full"
+        size="lg"
+        href={resolve("/sessions/[watchSessionId]", {
+          watchSessionId: data.current,
+        })}
+      >
+        Go to the current session
+      </Button>
+    {:else}
+      <Button
+        class="mt-8 w-full"
+        size="lg"
+        href={resolve("/groups/[groupId]/find", {
+          groupId: data.session.groupId,
+        })}
+      >
+        Find a movie
+      </Button>
+    {/if}
+  </Page>
+{:else if data.view === "invited"}
+  <Page
+    title={data.host === null
+      ? "Join this session?"
+      : `${data.host} invited you`}
+    description="Answer Seen or Not seen on your own phone. Anything nobody has seen becomes a match."
+    back={{ href: groupHref, label: data.session.groupName }}
+  >
+    <Card.Root>
+      <Card.Header>
+        <Card.Title>Watching together</Card.Title>
+        <Card.Description>{data.joined.join(", ")}</Card.Description>
+      </Card.Header>
+      <Card.Content>
+        <p class="text-sm text-muted-foreground">{data.session.filters}</p>
+      </Card.Content>
+      <Card.Footer>
+        <form
+          class="w-full"
+          method="POST"
+          action="?/join"
+          use:enhance={join.submit}
+        >
+          <input
+            type="hidden"
+            name="participationId"
+            value={data.participationId}
+          />
+          <Button type="submit" size="lg" class="w-full" disabled={join.saving}>
+            {join.saving ? "Joining…" : "Join"}
+          </Button>
+          {#if join.error}
+            <p class="mt-3 text-sm text-destructive" role="alert">
+              {join.error}
+            </p>
+          {/if}
+        </form>
+      </Card.Footer>
+    </Card.Root>
   </Page>
 {:else}
   <Page

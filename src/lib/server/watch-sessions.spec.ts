@@ -1,4 +1,4 @@
-import { inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -15,10 +15,15 @@ import { connectTestDb, createFixtures } from "#lib/server/testing/db.ts";
 import {
   answerMovie,
   canUndo,
+  changeWatchSessionFilters,
   dealCards,
   endWatchSession,
   getActiveWatchSessionId,
+  joinWatchSession,
   listMatches,
+  listParticipants,
+  pollWatchSession,
+  readDeckState,
   startWatchSession,
   undoLastAnswer,
   VOTE_COUNT_FLOOR,
@@ -106,6 +111,7 @@ async function start(
     watchSessionId,
     filters: { ...NO_FILTERS, genreIds: [world.genreId], ...filters },
     replacedWatchSessionId,
+    invitedUserIds: [],
   });
   expect(outcome).toBe("applied");
   return {
@@ -431,7 +437,7 @@ describe("answers and matches", () => {
     );
   });
 
-  it("ignores a late Not seen on a movie someone has seen", async () => {
+  it("records a late Not seen on a movie someone has seen, without a match", async () => {
     const m = await movie(world);
     const session = await start(world);
     const guest = await addGuest(session);
@@ -441,7 +447,10 @@ describe("answers and matches", () => {
     const answers = await db.query.watchSessionAnswers.findMany({
       where: { participationId: session.participationId },
     });
-    expect(answers).toEqual([]);
+    expect(answers.map((row) => row.movieId)).toEqual([m]);
+    expect(await matchIds(session)).toEqual([]);
+    // Undo takes back that answer, not the one before it.
+    expect(await undo(world, session)).toMatchObject({ movieId: m });
   });
 
   it("bumps the session's revision on every change", async () => {
@@ -575,6 +584,7 @@ describe("starting and ending", () => {
         watchSessionId: id(),
         filters: NO_FILTERS,
         replacedWatchSessionId: replaced,
+        invitedUserIds: [],
       });
     expect(await attempt(null)).toBe("session_active");
     expect(await attempt(id())).toBe("session_active");
@@ -599,6 +609,7 @@ describe("starting and ending", () => {
         watchSessionId: id(),
         filters: NO_FILTERS,
         replacedWatchSessionId: null,
+        invitedUserIds: [],
       });
     // Several at once, so at least two overlap on the test pool's two
     // connections.
@@ -619,6 +630,7 @@ describe("starting and ending", () => {
       watchSessionId,
       filters: { ...NO_FILTERS, genreIds: [world.genreId] },
       replacedWatchSessionId: null,
+      invitedUserIds: [],
     };
     expect(await startWatchSession(db, input)).toBe("applied");
     expect(await startWatchSession(db, input)).toBe("duplicate");
@@ -639,6 +651,7 @@ describe("starting and ending", () => {
       watchSessionId: id(),
       filters: NO_FILTERS,
       replacedWatchSessionId: null,
+      invitedUserIds: [],
     });
     expect(outcome).toBe("not_found");
     expect(
@@ -649,6 +662,7 @@ describe("starting and ending", () => {
         watchSessionId: id(),
         filters: NO_FILTERS,
         replacedWatchSessionId: null,
+        invitedUserIds: [],
       })
     ).toBe("not_found");
   });
@@ -705,6 +719,425 @@ describe("starting and ending", () => {
     expect(await answer(world, crossed, m, "not_seen")).toBe("not_found");
     expect((await undo(world, crossed)).outcome).toBe("not_found");
     expect(await matchIds(mine)).toEqual([]);
+  });
+});
+
+describe("changing filters", () => {
+  const change = (
+    userId: string,
+    session: Session,
+    filters: WatchFilters,
+    actionId = id()
+  ) =>
+    changeWatchSessionFilters(db, {
+      actionId,
+      userId,
+      watchSessionId: session.id,
+      filters,
+    });
+
+  it("keeps the session and its matches, and deals by the new filters", async () => {
+    const first = await movie(world);
+    const otherGenre = await fixtures.genre();
+    const second = await movie(world, { genreIds: [otherGenre] });
+    const session = await start(world);
+    await answer(world, session, first, "not_seen");
+    expect(await deal(session)).toEqual([]);
+
+    const filters = { ...NO_FILTERS, genreIds: [otherGenre] };
+    expect(await change(world.userId, session, filters)).toBe("applied");
+
+    expect(await getActiveWatchSessionId(db, world.groupId)).toBe(session.id);
+    expect(await deal(session)).toEqual([second]);
+    // Matches come from answers, never from filters.
+    expect(await matchIds(session)).toEqual([first]);
+    const state = await readDeckState(db, {
+      watchSessionId: session.id,
+      participationId: session.participationId,
+      exclude: [],
+    });
+    expect(state.matchCount).toBe(1);
+    expect(state.filters).toContain("Any length");
+    // Nothing recorded as past matches: the session didn't close.
+    const past = await db.query.groupPastMatches.findMany({
+      where: { groupId: world.groupId },
+    });
+    expect(past).toEqual([]);
+  });
+
+  it("lets only the host change filters, while the session is open", async () => {
+    const session = await start(world);
+    const guest = await addGuest(session);
+    await createGroupMembership({ ...world, userId: guest.userId });
+    const filters = { ...NO_FILTERS, genreIds: [world.genreId] };
+
+    expect(await change(guest.userId, session, filters)).toBe("not_host");
+    expect(await change((await newWorld()).userId, session, filters)).toBe(
+      "not_found"
+    );
+    await endWatchSession(db, {
+      actionId: id(),
+      userId: world.userId,
+      watchSessionId: session.id,
+    });
+    expect(await change(world.userId, session, filters)).toBe("session_closed");
+  });
+
+  it("treats a retried change as the same; other filters conflict", async () => {
+    const session = await start(world);
+    const actionId = id();
+    const filters = {
+      ...NO_FILTERS,
+      maxRuntime: 120,
+      genreIds: [world.genreId],
+    };
+    const before = await revision(session.id);
+
+    expect(await change(world.userId, session, filters, actionId)).toBe(
+      "applied"
+    );
+    expect(await change(world.userId, session, filters, actionId)).toBe(
+      "duplicate"
+    );
+    expect(
+      await change(
+        world.userId,
+        session,
+        { ...filters, maxRuntime: 90 },
+        actionId
+      )
+    ).toBe("conflict");
+    expect(await revision(session.id)).toBe((before ?? 0) + 1);
+  });
+});
+
+describe("invitations", () => {
+  // A second member of world's group, and a session that invites them.
+  async function startWithInvitee() {
+    const guest: World = { ...world, userId: await fixtures.user() };
+    await createGroupMembership(guest);
+    const watchSessionId = id();
+    expect(
+      await startWatchSession(db, {
+        actionId: id(),
+        userId: world.userId,
+        groupId: world.groupId,
+        watchSessionId,
+        filters: { ...NO_FILTERS, genreIds: [world.genreId] },
+        replacedWatchSessionId: null,
+        invitedUserIds: [guest.userId],
+      })
+    ).toBe("applied");
+    const host = {
+      id: watchSessionId,
+      participationId: await participation(world.userId, watchSessionId),
+    };
+    const invited = {
+      id: watchSessionId,
+      participationId: await participation(guest.userId, watchSessionId),
+    };
+    return { guest, host, invited };
+  }
+
+  const join = (world: World, session: Session, actionId = id()) =>
+    joinWatchSession(db, {
+      actionId,
+      userId: world.userId,
+      watchSessionId: session.id,
+      participationId: session.participationId,
+    });
+
+  it("doesn't count an invitee until they accept", async () => {
+    const m = await movie(world);
+    const { guest, host, invited } = await startWithInvitee();
+
+    // Invited isn't participating: no answers, and no say in matches yet.
+    expect(await answer(guest, invited, m, "not_seen")).toBe(
+      "not_participating"
+    );
+    await answer(world, host, m, "not_seen");
+    expect(await matchIds(host)).toEqual([m]);
+
+    const actionId = id();
+    expect(await join(guest, invited, actionId)).toBe("applied");
+    expect(await join(guest, invited, actionId)).toBe("duplicate");
+    // A second accept (another device) changes nothing.
+    expect(await join(guest, invited)).toBe("applied");
+
+    // Now a participant, so the match waits for their answer.
+    expect(await matchIds(host)).toEqual([]);
+    expect(await answer(guest, invited, m, "not_seen")).toBe("applied");
+    expect(await matchIds(host)).toEqual([m]);
+  });
+
+  it("hides movies on an invitee's seen list only after they accept", async () => {
+    const m = await movie(world);
+    const { guest, host, invited } = await startWithInvitee();
+    await addToSeenList(db, {
+      actionId: id(),
+      userId: guest.userId,
+      movieId: m,
+    });
+
+    expect(await deal(host)).toEqual([m]);
+    await join(guest, invited);
+    expect(await deal(host)).toEqual([]);
+  });
+
+  it("lets only the invitee accept, and only while the session is open", async () => {
+    const { guest, invited } = await startWithInvitee();
+    expect(await join(world, invited)).toBe("not_found");
+
+    expect(
+      await endWatchSession(db, {
+        actionId: id(),
+        userId: world.userId,
+        watchSessionId: invited.id,
+      })
+    ).toBe("applied");
+    expect(await join(guest, invited)).toBe("session_closed");
+  });
+
+  it("keeps people who joined when the host changes filters", async () => {
+    const { guest, host, invited } = await startWithInvitee();
+    const late: World = { ...world, userId: await fixtures.user() };
+    await createGroupMembership(late);
+    await join(guest, invited);
+
+    const next = id();
+    expect(
+      await startWatchSession(db, {
+        actionId: id(),
+        userId: world.userId,
+        groupId: world.groupId,
+        watchSessionId: next,
+        filters: NO_FILTERS,
+        replacedWatchSessionId: host.id,
+        invitedUserIds: [guest.userId, late.userId],
+      })
+    ).toBe("applied");
+
+    const people = await listParticipants(db, next);
+    expect(
+      people.map(({ userId, role, joined }) => ({ userId, role, joined }))
+    ).toEqual([
+      { userId: world.userId, role: "host", joined: true },
+      { userId: guest.userId, role: "guest", joined: true },
+      { userId: late.userId, role: "guest", joined: false },
+    ]);
+  });
+
+  it("invites only members of the group", async () => {
+    const stranger = await fixtures.user();
+    const outcome = await startWatchSession(db, {
+      actionId: id(),
+      userId: world.userId,
+      groupId: world.groupId,
+      watchSessionId: id(),
+      filters: NO_FILTERS,
+      replacedWatchSessionId: null,
+      invitedUserIds: [stranger],
+    });
+    expect(outcome).toBe("not_found");
+    expect(await getActiveWatchSessionId(db, world.groupId)).toBe(null);
+  });
+
+  it("treats a retried start with the same invitees in any order as the same", async () => {
+    const a: World = { ...world, userId: await fixtures.user() };
+    const b: World = { ...world, userId: await fixtures.user() };
+    await createGroupMembership(a);
+    await createGroupMembership(b);
+    const input = {
+      actionId: id(),
+      userId: world.userId,
+      groupId: world.groupId,
+      watchSessionId: id(),
+      filters: NO_FILTERS,
+      replacedWatchSessionId: null,
+      invitedUserIds: [a.userId, b.userId],
+    };
+    expect(await startWatchSession(db, input)).toBe("applied");
+    expect(
+      await startWatchSession(db, {
+        ...input,
+        invitedUserIds: [b.userId, a.userId, b.userId],
+      })
+    ).toBe("duplicate");
+    expect(
+      await startWatchSession(db, { ...input, invitedUserIds: [a.userId] })
+    ).toBe("conflict");
+  });
+});
+
+describe("together: polling and simultaneous answers", () => {
+  // The world's user hosts; a second member has accepted.
+  async function startTogether() {
+    const guest: World = { ...world, userId: await fixtures.user() };
+    await createGroupMembership(guest);
+    const watchSessionId = id();
+    await startWatchSession(db, {
+      actionId: id(),
+      userId: world.userId,
+      groupId: world.groupId,
+      watchSessionId,
+      filters: { ...NO_FILTERS, genreIds: [world.genreId] },
+      replacedWatchSessionId: null,
+      invitedUserIds: [guest.userId],
+    });
+    const host = {
+      id: watchSessionId,
+      participationId: await participation(world.userId, watchSessionId),
+    };
+    const guestSession = {
+      id: watchSessionId,
+      participationId: await participation(guest.userId, watchSessionId),
+    };
+    expect(
+      await joinWatchSession(db, {
+        actionId: id(),
+        userId: guest.userId,
+        watchSessionId,
+        participationId: guestSession.participationId,
+      })
+    ).toBe("applied");
+    await db
+      .update(groupMembers)
+      .set({ nickname: "Sam" })
+      .where(
+        and(
+          eq(groupMembers.groupId, world.groupId),
+          eq(groupMembers.userId, guest.userId)
+        )
+      );
+    return { guest, host, guestSession };
+  }
+
+  const read = (session: Session) =>
+    readDeckState(db, {
+      watchSessionId: session.id,
+      participationId: session.participationId,
+      exclude: [],
+    });
+
+  const poll = (userId: string, session: Session, since: string) =>
+    pollWatchSession(db, {
+      userId,
+      watchSessionId: session.id,
+      participationId: session.participationId,
+      since,
+      exclude: [],
+    });
+
+  it("answers a poll with the same fingerprint as unchanged", async () => {
+    await movie(world);
+    const { host } = await startTogether();
+    const { fingerprint } = await read(host);
+    expect(await poll(world.userId, host, fingerprint)).toEqual({
+      status: "unchanged",
+    });
+    // Reading changes nothing, so the fingerprint stays.
+    expect((await read(host)).fingerprint).toBe(fingerprint);
+  });
+
+  it("changes the fingerprint when someone else answers", async () => {
+    const m = await movie(world);
+    const { guest, host, guestSession } = await startTogether();
+    await answer(world, host, m, "not_seen");
+    const before = (await read(host)).fingerprint;
+
+    await answer(guest, guestSession, m, "not_seen");
+    const reply = await poll(world.userId, host, before);
+    expect(reply.status).toBe("changed");
+    if (reply.status !== "changed") return;
+    expect(reply.state.fingerprint).not.toBe(before);
+    expect(reply.state.matchCount).toBe(1);
+  });
+
+  it("changes the fingerprint when a participant's seen list changes elsewhere", async () => {
+    const m = await movie(world);
+    const { guest, host } = await startTogether();
+    const before = await read(host);
+    expect(before.cards.map((card) => card.id)).toEqual([m]);
+
+    // On the Seen movies page, outside the session: only seen_version moves.
+    await addToSeenList(db, {
+      actionId: id(),
+      userId: guest.userId,
+      movieId: m,
+    });
+    const reply = await poll(world.userId, host, before.fingerprint);
+    expect(reply.status).toBe("changed");
+    if (reply.status !== "changed") return;
+    expect(reply.state.cards).toEqual([]);
+  });
+
+  it("tells a poll the session ended, or that it isn't yours", async () => {
+    await movie(world);
+    const { guest, host } = await startTogether();
+    // Someone else's participation gets the same reply as an ended session.
+    expect((await poll(guest.userId, host, "")).status).toBe("ended");
+
+    await endWatchSession(db, {
+      actionId: id(),
+      userId: world.userId,
+      watchSessionId: host.id,
+    });
+    expect((await poll(world.userId, host, "")).status).toBe("ended");
+  });
+
+  it("says who you're waiting on once you've answered everything", async () => {
+    const m = await movie(world);
+    const { guest, host, guestSession } = await startTogether();
+    // With a card left to deal, nobody is waited on yet.
+    expect((await read(host)).waitingOn).toBe(null);
+
+    await answer(world, host, m, "not_seen");
+    expect((await read(host)).waitingOn).toEqual(["Sam"]);
+
+    // Sam answers: a match, and nothing left for anyone.
+    await answer(guest, guestSession, m, "not_seen");
+    const done = await read(host);
+    expect(done.waitingOn).toEqual([]);
+    expect(done.matchCount).toBe(1);
+  });
+
+  it("counts a match once when both answer Not seen at the same moment", async () => {
+    const m = await movie(world);
+    const { guest, host, guestSession } = await startTogether();
+    const outcomes = await Promise.all([
+      answer(world, host, m, "not_seen"),
+      answer(guest, guestSession, m, "not_seen"),
+    ]);
+    expect(outcomes).toEqual(["applied", "applied"]);
+    expect(await matchIds(host)).toEqual([m]);
+    expect((await read(host)).matchCount).toBe(1);
+  });
+
+  it("never matches a movie when Seen and Not seen arrive at the same moment", async () => {
+    const m = await movie(world);
+    const { guest, host, guestSession } = await startTogether();
+    await Promise.all([
+      answer(world, host, m, "not_seen"),
+      answer(guest, guestSession, m, "seen"),
+    ]);
+    expect(await matchIds(host)).toEqual([]);
+    expect(await seenList(guest.userId)).toEqual([m]);
+    expect(await deal(host)).toEqual([]);
+  });
+
+  it("bumps the revision once per answer, even when they overlap", async () => {
+    const movies = [await movie(world), await movie(world), await movie(world)];
+    const { guest, host, guestSession } = await startTogether();
+    const before = (await revision(host.id)) ?? 0;
+    await Promise.all(
+      movies.flatMap((m) => [
+        answer(world, host, m, "not_seen"),
+        answer(guest, guestSession, m, "not_seen"),
+      ])
+    );
+    // Six answers, six bumps: none lost to a race.
+    expect(await revision(host.id)).toBe(before + 6);
+    expect((await matchIds(host)).sort()).toEqual([...movies].sort());
   });
 });
 
