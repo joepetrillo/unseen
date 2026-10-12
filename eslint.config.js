@@ -25,6 +25,13 @@ const writePaths = [
       "Change groups only through #lib/server/groups.ts (it locks the group and logs the action).",
   },
   {
+    owner: "src/lib/server/watch-sessions.ts",
+    selector:
+      "CallExpression[callee.property.name=/^(insert|update|delete)$/][arguments.0.name=/^(watchSessions|watchSessionParticipants|watchSessionAnswers|groupPastMatches)$/]",
+    message:
+      "Change watch sessions only through #lib/server/watch-sessions.ts (it checks participation and bumps the revision).",
+  },
+  {
     owner: "src/lib/server/actions.ts",
     selector:
       "CallExpression[callee.property.name=/^(insert|update|delete)$/][arguments.0.name='actions']",
