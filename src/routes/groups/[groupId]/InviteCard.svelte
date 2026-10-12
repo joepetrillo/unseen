@@ -1,7 +1,11 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
+  import Share08Icon from "@hugeicons/core-free-icons/Share08Icon";
+  import { HugeiconsIcon } from "@hugeicons/svelte";
 
   import { ActionForm } from "#lib/action-form.svelte.ts";
+  import { Button } from "#lib/components/ui/button/index.ts";
+  import * as Card from "#lib/components/ui/card/index.ts";
 
   interface Props {
     groupId: string;
@@ -63,37 +67,43 @@
   }
 </script>
 
-<section class="mt-6 rounded border p-4" aria-labelledby="invite-heading">
-  <h2 id="invite-heading" class="font-semibold">Invite people</h2>
-  <p class="mt-1 text-sm text-neutral-600">
-    Anyone with this link or code can join.
-  </p>
-  <p class="mt-3 font-mono text-3xl tracking-widest" aria-label="Invite code">
-    {code}
-  </p>
-  <p class="mt-1 text-sm break-all text-neutral-600">{url}</p>
-
-  <div class="mt-3 flex flex-wrap items-center gap-2">
-    <button
-      class="rounded bg-black px-3 py-1.5 text-sm text-white"
-      onclick={share}
+<Card.Root role="region" aria-labelledby="invite-heading">
+  <Card.Header>
+    <Card.Title id="invite-heading">Invite people</Card.Title>
+    <Card.Description>Anyone with this link or code can join.</Card.Description>
+  </Card.Header>
+  <Card.Content>
+    <p
+      class="font-mono text-4xl font-semibold tracking-[0.25em]"
+      aria-label="Invite code"
     >
+      {code}
+    </p>
+    <p class="mt-2 text-sm break-all text-muted-foreground">{url}</p>
+  </Card.Content>
+  <Card.Footer class="flex flex-col items-stretch gap-3">
+    <Button size="lg" onclick={share}>
+      <HugeiconsIcon icon={Share08Icon} data-icon="inline-start" />
       Share invite
-    </button>
+    </Button>
     {#if isOwner}
-      <form method="POST" action="?/resetInvite" use:enhance={reset.submit}>
-        <button
-          class="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
-          disabled={reset.saving}
-        >
+      <form
+        class="flex flex-col"
+        method="POST"
+        action="?/resetInvite"
+        use:enhance={reset.submit}
+      >
+        <Button type="submit" variant="ghost" disabled={reset.saving}>
           {reset.saving ? "Resetting…" : "Reset invite"}
-        </button>
+        </Button>
       </form>
     {/if}
-  </div>
-  <!-- Polite: announced after whatever the screen reader is saying. -->
-  <p class="mt-2 text-sm" aria-live="polite">{status}</p>
-  {#if reset.error}
-    <p class="mt-2 text-sm text-red-700" role="alert">{reset.error}</p>
-  {/if}
-</section>
+    <!-- Polite: announced after whatever the screen reader is saying. -->
+    <p class="text-center text-sm empty:hidden" aria-live="polite">
+      {status}
+    </p>
+    {#if reset.error}
+      <p class="text-sm text-destructive" role="alert">{reset.error}</p>
+    {/if}
+  </Card.Footer>
+</Card.Root>

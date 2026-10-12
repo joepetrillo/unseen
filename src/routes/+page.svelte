@@ -1,9 +1,17 @@
 <script lang="ts">
   import { refreshAll } from "$app/navigation";
   import { resolve } from "$app/paths";
+  import Add01Icon from "@hugeicons/core-free-icons/Add01Icon";
+  import ArrowRight01Icon from "@hugeicons/core-free-icons/ArrowRight01Icon";
+  import Film01Icon from "@hugeicons/core-free-icons/Film01Icon";
+  import { HugeiconsIcon } from "@hugeicons/svelte";
 
   import { authClient } from "#lib/auth-client.ts";
   import JoinCodeForm from "#lib/components/JoinCodeForm.svelte";
+  import ListGroup from "#lib/components/ListGroup.svelte";
+  import Page from "#lib/components/Page.svelte";
+  import { Button } from "#lib/components/ui/button/index.ts";
+  import * as Item from "#lib/components/ui/item/index.ts";
 
   import type { PageProps } from "./$types";
 
@@ -39,58 +47,96 @@
 
 <svelte:head><title>Vunu</title></svelte:head>
 
-<main class="mx-auto max-w-xl p-4">
-  <h1 class="text-2xl font-bold">Vunu</h1>
-  <p class="mt-2">Find movies nobody in your group has seen.</p>
-  {#if data.user}
-    <p class="mt-4 text-sm">
-      Signed in as <strong>{data.user.email}</strong>.
-      <button
-        class="underline disabled:opacity-50"
-        onclick={signOut}
-        disabled={signingOut}
-      >
-        {signingOut ? "Signing out…" : "Sign out"}
-      </button>
-    </p>
-  {/if}
-  {#if errorMessage}
-    <p class="mt-4 text-sm text-red-700" role="alert">{errorMessage}</p>
-  {/if}
-  <p class="mt-4 text-sm">
-    <a class="underline" href={resolve("seen")}>Your seen movies</a>
-  </p>
-
-  <section class="mt-8" aria-labelledby="groups-heading">
-    <div class="flex items-baseline justify-between gap-4">
-      <h2 id="groups-heading" class="text-lg font-semibold">Your groups</h2>
-      <a class="text-sm underline" href={resolve("/groups/new")}>New group</a>
+<Page title="Vunu" description="Find movies nobody in your group has seen.">
+  <section aria-labelledby="groups-heading">
+    <div class="mb-3 flex items-center justify-between gap-4">
+      <h2 id="groups-heading" class="text-xl font-semibold">Your groups</h2>
+      <Button href={resolve("/groups/new")} variant="secondary" size="sm">
+        <HugeiconsIcon icon={Add01Icon} data-icon="inline-start" />
+        New group
+      </Button>
     </div>
     {#if data.groups.length === 0}
-      <p class="mt-2 text-sm text-neutral-600">
+      <p class="text-muted-foreground">
         You're not in a group yet. Start one, or join with an invite.
       </p>
     {:else}
-      <ul class="mt-2 divide-y rounded border">
+      <ListGroup>
         {#each data.groups as group (group.id)}
           <li>
-            <a
-              class="flex items-baseline justify-between gap-4 p-3 hover:bg-neutral-50"
-              href={resolve("/groups/[groupId]", { groupId: group.id })}
-            >
-              <span class="min-w-0 font-medium break-words">{group.name}</span>
-              <span class="shrink-0 text-sm text-neutral-600">
-                {group.memberCount === 1
-                  ? "1 person"
-                  : `${String(group.memberCount)} people`}
-                {#if group.role === "owner"}· Owner{/if}
-              </span>
-            </a>
+            <Item.Root class="rounded-none">
+              {#snippet child({ props })}
+                <a
+                  href={resolve("/groups/[groupId]", { groupId: group.id })}
+                  {...props}
+                >
+                  <Item.Content>
+                    <Item.Title class="break-words">{group.name}</Item.Title>
+                    <Item.Description>
+                      {group.memberCount === 1
+                        ? "1 person"
+                        : `${String(group.memberCount)} people`}
+                      {#if group.role === "owner"}· Owner{/if}
+                    </Item.Description>
+                  </Item.Content>
+                  <HugeiconsIcon
+                    icon={ArrowRight01Icon}
+                    class="size-5 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                </a>
+              {/snippet}
+            </Item.Root>
           </li>
         {/each}
-      </ul>
+      </ListGroup>
     {/if}
 
-    <JoinCodeForm error={form?.codeError} />
+    <div class="mt-6">
+      <JoinCodeForm error={form?.codeError} />
+    </div>
   </section>
-</main>
+
+  <section class="mt-10" aria-labelledby="you-heading">
+    <h2 id="you-heading" class="mb-3 text-xl font-semibold">You</h2>
+    <ListGroup>
+      <li>
+        <Item.Root class="rounded-none">
+          {#snippet child({ props })}
+            <a href={resolve("seen")} {...props}>
+              <Item.Media>
+                <HugeiconsIcon icon={Film01Icon} class="size-5" />
+              </Item.Media>
+              <Item.Content>
+                <Item.Title>Your seen movies</Item.Title>
+              </Item.Content>
+              <HugeiconsIcon
+                icon={ArrowRight01Icon}
+                class="size-5 text-muted-foreground"
+                aria-hidden="true"
+              />
+            </a>
+          {/snippet}
+        </Item.Root>
+      </li>
+    </ListGroup>
+    {#if data.user}
+      <div class="mt-6 flex flex-col items-start gap-2">
+        <p class="text-sm break-all text-muted-foreground">
+          Signed in as {data.user.email}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onclick={signOut}
+          disabled={signingOut}
+        >
+          {signingOut ? "Signing out…" : "Sign out"}
+        </Button>
+      </div>
+    {/if}
+    {#if errorMessage}
+      <p class="mt-4 text-sm text-destructive" role="alert">{errorMessage}</p>
+    {/if}
+  </section>
+</Page>

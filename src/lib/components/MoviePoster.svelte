@@ -37,13 +37,13 @@
     loading="lazy"
     width="342"
     height="513"
-    class="aspect-2/3 w-full rounded-md bg-neutral-200 object-cover"
+    class="aspect-2/3 w-full rounded-lg bg-muted object-cover"
   />
 {:else}
   <div
     role="img"
     aria-label="No poster for {title}"
-    class="flex aspect-2/3 w-full items-center justify-center rounded-md bg-neutral-200 p-1 text-center text-xs text-neutral-500"
+    class="flex aspect-2/3 w-full items-center justify-center rounded-lg bg-muted p-1 text-center text-xs text-muted-foreground"
   >
     No poster
   </div>
