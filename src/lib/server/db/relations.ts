@@ -25,6 +25,29 @@ export const relations = defineRelations(schema, (r) => ({
       optional: false,
     }),
   },
+  watchSessions: {
+    group: r.one.groups({
+      from: r.watchSessions.groupId,
+      to: r.groups.id,
+      optional: false,
+    }),
+    participants: r.many.watchSessionParticipants(),
+  },
+  watchSessionParticipants: {
+    watchSession: r.one.watchSessions({
+      from: r.watchSessionParticipants.watchSessionId,
+      to: r.watchSessions.id,
+      optional: false,
+    }),
+    answers: r.many.watchSessionAnswers(),
+  },
+  watchSessionAnswers: {
+    participation: r.one.watchSessionParticipants({
+      from: r.watchSessionAnswers.participationId,
+      to: r.watchSessionParticipants.id,
+      optional: false,
+    }),
+  },
   // Better Auth's relations (from its generator). Its adapter uses them for
   // joins; we rarely query them directly.
   users: {

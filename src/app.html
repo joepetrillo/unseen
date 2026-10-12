@@ -2,7 +2,24 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- viewport-fit=cover draws under the notch and home indicator; pages pad
+         their content back with env(safe-area-inset-*). resizes-content makes
+         Android's keyboard shrink the page the way iOS's does. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <!-- Status bar color, matching --background in each appearance. -->
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: light)"
+      content="#ffffff"
+    />
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: dark)"
+      content="#0a0a0a"
+    />
     <meta name="text-scale" content="scale" />
     %sveltekit.head%
   </head>

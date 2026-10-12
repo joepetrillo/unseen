@@ -2,6 +2,8 @@
   import { enhance } from "$app/forms";
   import { page } from "$app/state";
 
+  import { Button } from "#lib/components/ui/button/index.ts";
+
   import type { SubmitFunction } from "./$types";
 
   interface Props {
@@ -102,18 +104,17 @@
   <!-- The label adds the title for screen readers, which can list a page's
        buttons without the rows around them. It starts with the visible text,
        so voice control ("click Remove") still finds it. -->
-  <button
-    class={[
-      "rounded px-3 py-1.5 text-sm disabled:opacity-50",
-      seen ? "border" : "bg-black text-white",
-    ]}
+  <Button
+    type="submit"
+    variant={seen ? "outline" : "default"}
+    size="sm"
     disabled={saving}
     aria-label={seen ? `Remove ${title}` : `Seen it: ${title}`}
   >
     {seen ? "Remove" : "Seen it"}
-  </button>
+  </Button>
   {#if errorMessage}
-    <p class="max-w-40 text-right text-xs text-red-700" role="alert">
+    <p class="max-w-40 text-right text-xs text-destructive" role="alert">
       {errorMessage}
     </p>
   {/if}

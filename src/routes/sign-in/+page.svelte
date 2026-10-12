@@ -3,6 +3,10 @@
   import { tick } from "svelte";
 
   import { authClient } from "#lib/auth-client.ts";
+  import Page from "#lib/components/Page.svelte";
+  import { Button } from "#lib/components/ui/button/index.ts";
+  import * as Field from "#lib/components/ui/field/index.ts";
+  import { Input } from "#lib/components/ui/input/index.ts";
 
   // How Better Auth's client describes a failed request.
   interface AuthError {
@@ -113,71 +117,72 @@
 
 <svelte:head><title>Sign in · Vunu</title></svelte:head>
 
-<main class="mx-auto max-w-sm p-4">
-  <h1 class="text-2xl font-bold">Sign in to Vunu</h1>
-
+<Page title="Sign in to Vunu">
   {#if step === "email"}
     <!-- Before hydration, POST keeps sensitive fields out of URLs/logs. -->
-    <form method="POST" class="mt-6 flex flex-col gap-3" onsubmit={submitEmail}>
-      <label class="flex flex-col gap-1">
-        <span class="text-sm font-medium">Email</span>
-        <input
-          class="rounded border px-3 py-2"
-          type="email"
-          name="email"
-          autocomplete="email"
-          required
-          disabled={pending !== null}
-          bind:value={email}
-        />
-      </label>
-      <button
-        class="rounded bg-black px-3 py-2 text-white disabled:opacity-50"
-        disabled={pending !== null}
-      >
-        {pending === "send" ? "Sending…" : "Email me a code"}
-      </button>
+    <form method="POST" onsubmit={submitEmail}>
+      <Field.Group>
+        <Field.Field>
+          <Field.Label for="email">Email</Field.Label>
+          <Input
+            id="email"
+            type="email"
+            name="email"
+            autocomplete="email"
+            autocapitalize="none"
+            spellcheck="false"
+            enterkeyhint="send"
+            required
+            disabled={pending !== null}
+            bind:value={email}
+          />
+        </Field.Field>
+        <Button type="submit" size="lg" disabled={pending !== null}>
+          {pending === "send" ? "Sending…" : "Email me a code"}
+        </Button>
+      </Field.Group>
     </form>
   {:else}
-    <p class="mt-6 text-sm">
-      We sent a 6-digit code to <strong>{email}</strong>. It expires in 5
-      minutes.
+    <p class="mb-6">
+      We sent a 6-digit code to <strong class="break-all">{email}</strong>. It
+      expires in 5 minutes.
     </p>
-    <form method="POST" class="mt-4 flex flex-col gap-3" onsubmit={submitCode}>
-      <label class="flex flex-col gap-1">
-        <span class="text-sm font-medium">Code</span>
-        <!-- one-time-code lets phones offer the code from the email. The
-             pattern is a JS string because Svelte reads {6} in a quoted
-             attribute as an expression, turning it into "[0-9]6". -->
-        <input
-          class="rounded border px-3 py-2 tracking-widest"
-          type="text"
-          name="code"
-          inputmode="numeric"
-          autocomplete="one-time-code"
-          pattern={"[0-9]{6}"}
-          maxlength="6"
-          required
-          disabled={pending !== null}
-          bind:value={code}
-        />
-      </label>
-      <button
-        class="rounded bg-black px-3 py-2 text-white disabled:opacity-50"
-        disabled={pending !== null}
-      >
-        {pending === "verify" ? "Signing in…" : "Sign in"}
-      </button>
+    <form method="POST" onsubmit={submitCode}>
+      <Field.Group>
+        <Field.Field>
+          <Field.Label for="code">Code</Field.Label>
+          <!-- one-time-code lets phones offer the code from the email. The
+               pattern is a JS string because Svelte reads {6} in a quoted
+               attribute as an expression, turning it into "[0-9]6". -->
+          <Input
+            id="code"
+            class="h-14 text-center font-mono text-2xl tracking-[0.5em]"
+            type="text"
+            name="code"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            enterkeyhint="done"
+            pattern={"[0-9]{6}"}
+            maxlength={6}
+            required
+            disabled={pending !== null}
+            bind:value={code}
+          />
+        </Field.Field>
+        <Button type="submit" size="lg" disabled={pending !== null}>
+          {pending === "verify" ? "Signing in…" : "Sign in"}
+        </Button>
+      </Field.Group>
     </form>
-    <p class="mt-4 text-sm">
+    <p class="mt-6 text-sm text-muted-foreground">
       Didn't get it? Check your spam folder, or
-      <button
-        type="button"
-        class="underline disabled:opacity-50"
+      <Button
+        variant="link"
+        class="h-auto p-0 text-sm"
         disabled={pending !== null}
         onclick={resendCode}
       >
-        {pending === "send" ? "sending…" : "send it again"}</button
+        {pending === "send" ? "sending…" : "send it again"}</Button
       >.
     </p>
     {#if resent}
@@ -185,17 +190,17 @@
         Sent. Use the code in the newest email.
       </p>
     {/if}
-    <button
-      type="button"
-      class="mt-4 text-sm underline disabled:opacity-50"
+    <Button
+      variant="ghost"
+      class="mt-4 -ml-5"
       disabled={pending !== null}
       onclick={useDifferentEmail}
     >
       Use a different email
-    </button>
+    </Button>
   {/if}
 
   {#if errorMessage}
-    <p class="mt-4 text-sm text-red-700" role="alert">{errorMessage}</p>
+    <p class="mt-4 text-sm text-destructive" role="alert">{errorMessage}</p>
   {/if}
-</main>
+</Page>

@@ -1,6 +1,9 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
 
+  import { Button } from "#lib/components/ui/button/index.ts";
+  import * as Field from "#lib/components/ui/field/index.ts";
+  import { Input } from "#lib/components/ui/input/index.ts";
   import {
     INVITE_CODE_ALPHABET,
     INVITE_CODE_LENGTH,
@@ -12,6 +15,9 @@
   }
 
   let { error }: Props = $props();
+  // Unique per component instance and the same on server and browser, so the
+  // label and error can point at the input (like React's useId).
+  const id = $props.id();
 
   let code = $state("");
   const notInCode = new RegExp(`[^${INVITE_CODE_ALPHABET}]`, "g");
@@ -35,7 +41,6 @@
 
 <!-- Posts to the current page's `find` action (see findInvite). -->
 <form
-  class="mt-4"
   method="POST"
   action="?/find"
   use:enhance={() =>
@@ -43,11 +48,12 @@
     ({ update }) =>
       update({ reset: false })}
 >
-  <div class="flex items-end gap-2">
-    <label class="flex flex-col text-sm">
-      Join with a code
-      <input
-        class="mt-1 w-36 rounded border px-2 py-1.5 font-mono tracking-widest uppercase"
+  <Field.Field data-invalid={error !== undefined}>
+    <Field.Label for="{id}-code">Join with a code</Field.Label>
+    <div class="flex gap-3">
+      <Input
+        id="{id}-code"
+        class="max-w-44 font-mono tracking-[0.3em] uppercase"
         name="code"
         value={code}
         oninput={keepCodeCharacters}
@@ -57,14 +63,12 @@
         autocapitalize="characters"
         spellcheck="false"
         aria-invalid={error !== undefined}
-        aria-describedby={error === undefined ? undefined : "code-error"}
+        aria-describedby={error === undefined ? undefined : `${id}-error`}
       />
-    </label>
-    <button class="rounded border px-3 py-1.5 text-sm">Join</button>
-  </div>
-  {#if error}
-    <p id="code-error" class="mt-2 text-sm text-red-700" role="alert">
-      {error}
-    </p>
-  {/if}
+      <Button type="submit" variant="secondary">Join</Button>
+    </div>
+    {#if error}
+      <Field.Error id="{id}-error">{error}</Field.Error>
+    {/if}
+  </Field.Field>
 </form>

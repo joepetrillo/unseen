@@ -1,7 +1,13 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
 
+  import ListGroup from "#lib/components/ListGroup.svelte";
   import MoviePoster from "#lib/components/MoviePoster.svelte";
+  import Page from "#lib/components/Page.svelte";
+  import { Button } from "#lib/components/ui/button/index.ts";
+  import { Input } from "#lib/components/ui/input/index.ts";
+  import * as Item from "#lib/components/ui/item/index.ts";
+  import { NativeSelect } from "#lib/components/ui/native-select/index.ts";
 
   import type { PageProps } from "./$types";
   import SeenButton from "./SeenButton.svelte";
@@ -11,7 +17,7 @@
   // A link to this page with the current search, changed by `changes`. Every
   // change goes back to page 1 unless it sets the page, and default values are
   // left out to keep URLs short.
-  function searchHref(changes: Partial<PageProps["data"]["search"]>): string {
+  function searchHref(changes: Partial<PageProps["data"]["search"]>) {
     const { scope, title, genre, decade, page } = {
       ...data.search,
       page: 1,
@@ -24,8 +30,14 @@
     if (decade !== undefined) params.decade = String(decade);
     if (page > 1) params.page = String(page);
     const query = new URLSearchParams(params).toString();
-    return query === "" ? resolve("seen") : `${resolve("seen")}?${query}`;
+    // `resolve` accepts a query string, so links keep Kit's resolved-path type.
+    return resolve(query === "" ? "seen" : `seen?${query}`);
   }
+
+  let tabs = $derived([
+    { scope: "mine", label: `Your list (${String(data.seenCount)})` },
+    { scope: "all", label: "All movies" },
+  ] as const);
 
   let filtered = $derived(
     data.search.title !== "" ||
@@ -49,63 +61,54 @@
 
 <svelte:head><title>Seen movies · Vunu</title></svelte:head>
 
-<main class="mx-auto max-w-xl p-4">
-  <a class="text-sm underline" href={resolve("/")}>Home</a>
-  <h1 class="mt-2 text-2xl font-bold">Seen movies</h1>
-  <p class="mt-1 text-sm text-neutral-600">
-    Vunu never deals you a movie on your list.
-  </p>
-
-  <nav class="mt-4 flex gap-2 border-b" aria-label="Lists">
-    <a
-      class={[
-        "-mb-px border-b-2 px-3 py-2 text-sm",
-        data.search.scope === "mine"
-          ? "border-black font-medium"
-          : "border-transparent text-neutral-600",
-      ]}
-      href={searchHref({ scope: "mine" })}
-      aria-current={data.search.scope === "mine" ? "page" : undefined}
-    >
-      Your list ({data.seenCount})
-    </a>
-    <a
-      class={[
-        "-mb-px border-b-2 px-3 py-2 text-sm",
-        data.search.scope === "all"
-          ? "border-black font-medium"
-          : "border-transparent text-neutral-600",
-      ]}
-      href={searchHref({ scope: "all" })}
-      aria-current={data.search.scope === "all" ? "page" : undefined}
-    >
-      All movies
-    </a>
+<Page
+  title="Seen movies"
+  description="Vunu never deals you a movie on your list."
+  back={{ href: resolve("/"), label: "Home" }}
+>
+  <!-- Links styled as an iOS segmented control: each tab is its own URL. -->
+  <nav class="flex gap-1 rounded-4xl bg-muted p-1" aria-label="Lists">
+    {#each tabs as tab (tab.scope)}
+      <a
+        class={[
+          "flex-1 rounded-4xl px-4 py-2 text-center text-sm font-medium transition-colors",
+          data.search.scope === tab.scope
+            ? "bg-background shadow-sm dark:bg-input"
+            : "text-muted-foreground",
+        ]}
+        href={searchHref({ scope: tab.scope })}
+        aria-current={data.search.scope === tab.scope ? "page" : undefined}
+      >
+        {tab.label}
+      </a>
+    {/each}
   </nav>
 
   <!-- A GET form: submitting navigates to this page with the fields as URL
        search params, and the load function reruns with them. -->
   <form
-    class="mt-4 flex flex-wrap gap-2"
+    class="mt-6 flex flex-col gap-3"
     role="search"
     onformdata={dropEmptyFields}
   >
     {#if data.search.scope === "all"}
       <input type="hidden" name="scope" value="all" />
     {/if}
-    <input
-      class="min-w-0 flex-1 rounded border px-3 py-2"
-      type="search"
-      name="title"
-      value={data.search.title}
-      maxlength="100"
-      placeholder="Search by title"
-      aria-label="Title"
-    />
-    <button class="rounded bg-black px-3 py-2 text-white">Search</button>
-    <div class="flex w-full gap-2">
-      <select
-        class="min-w-0 flex-1 rounded border px-2 py-2"
+    <div class="flex gap-3">
+      <Input
+        type="search"
+        name="title"
+        value={data.search.title}
+        maxlength={100}
+        placeholder="Search by title"
+        enterkeyhint="search"
+        aria-label="Title"
+      />
+      <Button type="submit" variant="secondary">Search</Button>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <NativeSelect
+        class="w-full"
         name="genre"
         aria-label="Genre"
         onchange={submitOnChange}
@@ -116,9 +119,9 @@
             {genre.name}
           </option>
         {/each}
-      </select>
-      <select
-        class="min-w-0 flex-1 rounded border px-2 py-2"
+      </NativeSelect>
+      <NativeSelect
+        class="w-full"
         name="decade"
         aria-label="Decade"
         onchange={submitOnChange}
@@ -129,73 +132,88 @@
             {decade}s
           </option>
         {/each}
-      </select>
+      </NativeSelect>
     </div>
   </form>
 
   {#if data.movies.length > 0}
-    <ul class="mt-4 divide-y">
+    <ListGroup class="mt-6">
       {#each data.movies as movie (movie.id)}
-        <li class="flex items-center gap-3 py-2">
-          <div class="w-12 shrink-0">
-            <MoviePoster
-              posterPath={movie.posterPath}
-              title={movie.title}
-              sizes="48px"
-            />
-          </div>
-          <div class="min-w-0 flex-1">
-            <p class="truncate font-medium">{movie.title}</p>
-            <p class="text-sm text-neutral-600">
-              {movie.year ?? "Year unknown"}
-              {#if data.search.scope === "all" && movie.seen}
-                · Seen
-              {/if}
-            </p>
-          </div>
-          <SeenButton
-            movieId={movie.id}
-            title={movie.title}
-            seen={movie.seen}
-          />
+        <li>
+          <Item.Root class="flex-nowrap rounded-none" size="sm">
+            <Item.Media class="w-12 shrink-0">
+              <MoviePoster
+                posterPath={movie.posterPath}
+                title={movie.title}
+                sizes="48px"
+              />
+            </Item.Media>
+            <Item.Content class="min-w-0">
+              <Item.Title class="block w-full truncate"
+                >{movie.title}</Item.Title
+              >
+              <Item.Description>
+                {movie.year ?? "Year unknown"}
+                {#if data.search.scope === "all" && movie.seen}
+                  · Seen
+                {/if}
+              </Item.Description>
+            </Item.Content>
+            <Item.Actions>
+              <SeenButton
+                movieId={movie.id}
+                title={movie.title}
+                seen={movie.seen}
+              />
+            </Item.Actions>
+          </Item.Root>
         </li>
       {/each}
-    </ul>
+    </ListGroup>
   {:else if data.search.page > 1}
-    <p class="mt-6 text-sm">No more movies.</p>
+    <p class="mt-8 text-muted-foreground">No more movies.</p>
   {:else if filtered}
-    <p class="mt-6 text-sm">
+    <p class="mt-8 text-muted-foreground">
       No movies match.
       <a
-        class="underline"
+        class="font-medium text-foreground underline underline-offset-4"
         href={searchHref({ title: "", genre: undefined, decade: undefined })}
       >
         Clear the search
       </a>
     </p>
   {:else if data.search.scope === "mine"}
-    <p class="mt-6 text-sm">
+    <p class="mt-8 text-muted-foreground">
       Nothing here yet. Find movies you've seen in
-      <a class="underline" href={searchHref({ scope: "all" })}>All movies</a>.
+      <a
+        class="font-medium text-foreground underline underline-offset-4"
+        href={searchHref({ scope: "all" })}>All movies</a
+      >.
     </p>
   {:else}
-    <p class="mt-6 text-sm">The catalog is empty.</p>
+    <p class="mt-8 text-muted-foreground">The catalog is empty.</p>
   {/if}
 
   {#if data.search.page > 1 || data.hasNextPage}
-    <nav class="mt-4 flex justify-between text-sm" aria-label="Pages">
+    <nav class="mt-6 flex justify-between gap-3" aria-label="Pages">
       {#if data.search.page > 1}
-        <a class="underline" href={searchHref({ page: data.search.page - 1 })}>
+        <Button
+          href={searchHref({ page: data.search.page - 1 })}
+          variant="outline"
+        >
           Previous
-        </a>
+        </Button>
       {:else}
         <span></span>
       {/if}
       {#if data.hasNextPage}
-        <a class="underline" href={searchHref({ page: data.search.page + 1 })}>
+        <Button
+          href={searchHref({ page: data.search.page + 1 })}
+          variant="outline"
+        >
           Next
-        </a>
+        </Button>
       {/if}
     </nav>
   {/if}
-</main>
+</Page>

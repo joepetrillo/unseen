@@ -1,20 +1,46 @@
+import { eq } from "drizzle-orm";
+
 import type { Db, Transaction } from "#lib/server/db/client.ts";
 import { type ActionType, actions } from "#lib/server/db/schema.ts";
 
+// What each type of action carries besides its ID and user. Every action type
+// needs an entry (`Action` below indexes this by type), so a new enum value
+// fails to compile until its inputs are named here.
+interface InputsByType {
+  seen_list_add: { movieId: number };
+  seen_list_remove: { movieId: number };
+  group_create: { groupId: string; groupName: string; nickname: string };
+  group_join: { groupId: string; nickname: string };
+  group_leave: { groupId: string };
+  group_rename: { groupId: string; groupName: string };
+  group_delete: { groupId: string };
+  group_reset_invite: { groupId: string };
+  group_remove_member: { groupId: string; memberId: string };
+  group_set_nickname: { groupId: string; nickname: string };
+  watch_session_start: {
+    groupId: string;
+    watchSessionId: string;
+    maxRuntime: number | null;
+    minYear: number | null;
+    maxYear: number | null;
+    /** Sorted and without duplicates, so a retry compares equal. */
+    genreIds: number[];
+    replacedWatchSessionId: string | null;
+  };
+  watch_session_end: { watchSessionId: string };
+  watch_answer_seen: { participationId: string; movieId: number };
+  watch_answer_not_seen: { participationId: string; movieId: number };
+  watch_answer_undo: { participationId: string };
+}
+
 /**
  * A change a user asked for, under the ID their browser generated for it.
- * Each type sets the inputs it has; the others stay unset (null in the log).
+ * A union with one member per type: `{ type: "group_rename", ... }` must
+ * carry exactly the inputs a rename needs, checked by the compiler.
  */
-export interface Action {
-  id: string;
-  userId: string;
-  type: ActionType;
-  movieId?: number;
-  groupId?: string;
-  memberId?: string;
-  groupName?: string;
-  nickname?: string;
-}
+export type Action = {
+  [T in ActionType]: { id: string; userId: string; type: T } & InputsByType[T];
+}[ActionType];
 
 type LoggedAction = typeof actions.$inferSelect;
 
@@ -26,7 +52,14 @@ const inputs = [
   "memberId",
   "groupName",
   "nickname",
-] as const satisfies readonly (keyof Action & keyof LoggedAction)[];
+  "watchSessionId",
+  "participationId",
+  "maxRuntime",
+  "minYear",
+  "maxYear",
+  "genreIds",
+  "replacedWatchSessionId",
+] as const satisfies readonly (keyof LoggedAction)[];
 
 /**
  * - `applied`: the change was made.
@@ -34,6 +67,17 @@ const inputs = [
  * - `conflict`: the ID belongs to a different action; nothing changed.
  */
 export type ActionOutcome = "applied" | "duplicate" | "conflict";
+
+interface RunOptions {
+  /**
+   * Runs only when the action ID isn't in the log yet, before the change's
+   * transaction and outside it, so what it does sticks even if the change is
+   * refused and rolled back. For charging a limit (invite lookups): a retry
+   * of an action that already went through isn't charged again. Throw to
+   * stop before the change runs.
+   */
+  beforeNew?: () => Promise<void>;
+}
 
 /**
  * Makes a change at most once per action ID. The action is logged and `apply`
@@ -43,8 +87,17 @@ export type ActionOutcome = "applied" | "duplicate" | "conflict";
 export async function runAction(
   db: Db,
   action: Action,
-  apply: (tx: Transaction) => Promise<void>
+  apply: (tx: Transaction) => Promise<void>,
+  { beforeNew }: RunOptions = {}
 ): Promise<ActionOutcome> {
+  if (beforeNew !== undefined) {
+    const logged = await db.query.actions.findFirst({
+      columns: { id: true },
+      where: { id: action.id },
+    });
+    if (logged === undefined) await beforeNew();
+  }
+
   return db.transaction(async (tx) => {
     // If a request with the same ID is still in flight (a double submit), this
     // waits until its transaction ends, then sees its row. So a double submit
@@ -69,12 +122,37 @@ export async function runAction(
   });
 }
 
+/**
+ * Marks an answer as reversed by the undo `undoneBy`, taking it off its
+ * owner's undo stack for good. Part of the undo's transaction.
+ */
+export async function markUndone(
+  tx: Transaction,
+  actionId: string,
+  undoneBy: string
+): Promise<void> {
+  await tx
+    .update(actions)
+    .set({ undoneByActionId: undoneBy })
+    .where(eq(actions.id, actionId));
+}
+
 // Includes the user: an ID taken from someone else's request is a conflict,
 // never a successful retry.
 function isSameAction(logged: LoggedAction, action: Action): boolean {
+  // Each union member has only its own inputs; read the rest as missing.
+  const given: Partial<Record<(typeof inputs)[number], unknown>> = action;
   return (
     logged.userId === action.userId &&
     logged.type === action.type &&
-    inputs.every((input) => logged[input] === (action[input] ?? null))
+    inputs.every((input) => sameValue(logged[input], given[input] ?? null))
   );
+}
+
+// Arrays (genre IDs) compare by content; everything else is a plain value.
+function sameValue(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((value, i) => value === b[i]);
+  }
+  return a === b;
 }
