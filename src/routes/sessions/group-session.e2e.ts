@@ -210,3 +210,12 @@ test("the host's Change filters brings guests along", async ({ browser }) => {
   await sam.getByRole("link", { name: "Go to the current session" }).click();
   await expect(card(sam)).toHaveText(title(0));
 });
+
+test("signing out elsewhere takes the deck to sign-in", async ({ browser }) => {
+  const { sam } = await startTogether(browser);
+
+  // The login session ends (expired, or signed out on another tab): the
+  // next poll is redirected, and the page follows it to sign-in.
+  await sam.context().clearCookies();
+  await expect(sam).toHaveURL(/\/sign-in/, LIVE);
+});

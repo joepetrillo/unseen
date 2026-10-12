@@ -202,6 +202,51 @@ describe("subscribeToWatchSession", () => {
     subscription.stop();
   });
 
+  it("counts a reply in an unexpected shape as a failed poll", async () => {
+    const fetch = vi.fn(() =>
+      Promise.resolve(Response.json({ status: "changed" }))
+    );
+    const onChange = vi.fn();
+    const onConnection = vi.fn();
+    const subscription = subscribeToWatchSession("session-1", {
+      fingerprint: "f0",
+      query: () => ({}),
+      onChange,
+      onConnection,
+      fetch,
+    });
+
+    await vi.advanceTimersByTimeAsync(FASTEST_MS);
+    expect(onConnection).toHaveBeenLastCalledWith(false);
+    expect(onChange).not.toHaveBeenCalled();
+    // And it keeps polling.
+    await vi.advanceTimersByTimeAsync(SLOWEST_MS);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    subscription.stop();
+  });
+
+  it("ends when the poll was sent to the sign-in page", async () => {
+    // What fetch returns after following the sign-in redirect.
+    const signInPage = new Response("<html></html>");
+    Object.defineProperties(signInPage, {
+      redirected: { value: true },
+      url: { value: "https://vunu.test/sign-in?redirectTo=%2Fsessions" },
+    });
+    const fetch = vi.fn(() => Promise.resolve(signInPage));
+    const onChange = vi.fn();
+    subscribeToWatchSession("session-1", {
+      fingerprint: "f0",
+      query: () => ({}),
+      onChange,
+      fetch,
+    });
+
+    await vi.advanceTimersByTimeAsync(FASTEST_MS);
+    expect(onChange).toHaveBeenCalledWith({ status: "ended" });
+    await vi.advanceTimersByTimeAsync(SLOWEST_MS * 3);
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
   it("stops once the session has ended for you", async () => {
     const server = fakeServer();
     const { onChange } = subscribe(server);

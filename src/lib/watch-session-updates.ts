@@ -1,4 +1,4 @@
-import type { PollReply } from "#lib/watch-fields.ts";
+import { type PollReply, pollReplySchema } from "#lib/watch-fields.ts";
 
 // The browser's side of live updates (spec section 5). It polls today; a
 // real-time service would replace this module and the server's
@@ -123,14 +123,21 @@ export function subscribeToWatchSession(
         `/sessions/${watchSessionId}/poll?${params.toString()}`,
         { headers: { accept: "application/json" } }
       );
-      // Signed out, say: the sign-in redirect isn't a poll reply.
+      // Signed out (the session expired): the poll was redirected to the
+      // sign-in page. Reloading the page takes the person there and back.
       if (
-        !response.ok ||
-        !response.headers.get("content-type")?.includes("json")
+        response.redirected &&
+        new URL(response.url).pathname === "/sign-in"
       ) {
-        return null;
+        return { status: "ended" };
       }
-      return (await response.json()) as PollReply;
+      if (!response.ok) return null;
+      // A reply in any other shape (a different deployment, say) counts as
+      // a failed poll rather than breaking the loop.
+      const reply = pollReplySchema.safeParse(
+        await response.json().catch(() => null)
+      );
+      return reply.success ? reply.data : null;
     } catch {
       return null;
     }
