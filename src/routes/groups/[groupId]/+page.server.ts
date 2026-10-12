@@ -15,6 +15,7 @@ import {
   setNickname,
 } from "#lib/server/groups.ts";
 import { requireUser } from "#lib/server/require-user.ts";
+import { getActiveWatchSessionId } from "#lib/server/watch-sessions.ts";
 
 import type { Actions, PageServerLoad, RequestEvent } from "./$types";
 
@@ -30,6 +31,7 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
   return {
     group,
     inviteUrl: `${url.origin}/join/${group.inviteCode}`,
+    activeWatchSessionId: await getActiveWatchSessionId(db, group.id),
   };
 };
 
