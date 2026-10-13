@@ -42,6 +42,8 @@ The Svelte MCP server (`svelte`) and the `svelte-code-writer` / `svelte-core-bes
 
 ## Architecture rules (easy to get wrong)
 
+- **Stage 8 replaces watch sessions with the group deck** (spec section 1, decided 2026-10-13): no sessions, Not seen remembered per user for 2 weeks, everyone in the group counts, personal preferences that only pick new movies, best-rated order. The watch-session rules below describe the current code; rewrite them as stage 8 lands, and don't build new features on watch sessions.
+
 - Prefer deriving state from stored facts over storing extra state.
 - Database: `pg` pool via Drizzle's `node-postgres` driver, created once at module level (max 1–2), `DATABASE_URL` = Neon pooled string, `DATABASE_URL_UNPOOLED` for drizzle-kit only, registered with `attachDatabasePool`. Details: spec section 5b.
 - Every pushed branch gets a Vercel Preview deployment with its own Neon database branch (`preview/<git-branch>`, copied from production by the Neon-Managed integration); `main` deploys Production. `production-guard.ts` makes Preview refuse Production's database, at migration and at runtime. Auth trusts a preview's exact hostnames (`VERCEL_URL`, `VERCEL_BRANCH_URL`), never `*.vercel.app`. Details: spec section 5b.

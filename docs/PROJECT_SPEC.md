@@ -23,90 +23,79 @@ Movies only. US region only (release dates, age ratings). TV shows are a possibl
 - **Roles:** the creator is the group's **owner**. Only the owner can rename the group, reset the invite, remove members, and delete the group. Anyone can leave; when the owner leaves, the **longest-standing member** becomes owner; when the last member leaves, the group is deleted. No explicit ownership transfer in v1. The role is stored (not derived from join order) so explicit transfer can be added later.
 - **Names (decided 2026-10-08):** each membership has a **nickname**, asked when you create or join a group and prefilled from your most recent one. Nicknames are unique within a group ignoring case, editable from the group page, and only visible to that group. Email addresses are never shown to other members. Better Auth's `users.name` stays unused.
 - Each user has ONE personal **seen list**, tied to the user, shared across all their groups.
-- Only "seen" is stored per user. **"Not seen" is NOT remembered across sessions** (keeps data simple and never stale). Re-asking about popular movies is an accepted cost.
-- A movie missing from someone's seen list means **unknown**, never "not seen".
+- Each user's **Not seen** answers are remembered too, for **2 weeks** (decided 2026-10-13, reversing "Not seen is not remembered across sessions"). An answer is a fact about you, so it counts in every group you're in. After 2 weeks it stops counting and the movie can be dealt to you again, because people watch movies elsewhere and never tell Vunu.
+- A movie missing from someone's seen list means **unknown**, never "not seen". Only an explicit Not seen counts.
 
-### Sessions
+### How finding a movie works (decided 2026-10-13, replaces sessions)
 
-- **One active session per group.** Tapping **Find a movie** while one is active offers **Resume** or **Start fresh** (which closes the old one).
-- Any group member can start one. The person who starts it is the **host** and picks **who's watching tonight** (a subset of the group) as chips on the start screen, all ticked by default (decided 2026-10-12, stage 7). Solo sessions are allowed.
-- Starting takes one tap: filters are optional and shown open on the start screen; untouched, it starts with none. See Filters. If someone else in the group starts a session first, a later Start lands on "A session is already going"; its host can continue or replace it, people in it or invited to it get a link to it, and everyone else is told the group has one going.
-- **Changing filters keeps the session.** **Change filters** (host only) changes the session's filters in place: its people, answers, and matches stay (matches come from answers, never filters), and only the movies dealt from then on change. Cards already on someone's screen stay; guests' decks pick up the new filters on their next poll. Why: the owner's phone check found that replacing the session made the matches seem lost (decided 2026-10-12, reversing 2026-10-11). Starting over is separate: the host's **Start a new one** on the start screen closes the session (recording its matches) and opens a new one in one step, naming the session it replaces so a stale screen can't end a newer one; people who had joined stay in without accepting again. That mechanism serves stage 8's Start fresh.
-- Sessions **auto-close after 24 hours** without activity. The timer resets only on successful user changes (answers, undo, participant changes), never on reads, polling, or duplicate retries. The host can close one anytime. Closed sessions reject all changes.
+Stages 6–7 built **watch sessions**: a host, who's watching, invites, End session. Stage 8 replaces them. Nobody finishes a session in real life: once the group sees a movie they want, they watch it and forget the app. And a group already is the set of people, so a session was a group inside a group. Reasoning, alternatives, and simulations: the project files `stage-8/brainstorm.md`, `stage-8/algorithm.md` and `stage-8/explore/report.md`.
+
+- **Nothing to start or end.** Open a group and tap **Find a movie** to get the deck. Everyone in the group counts toward every match. Close the app whenever; there's no host, no invite to accept, and no auto-close.
+- Typical uses all work the same way: everyone on the couch on their own phones a few minutes before choosing, or one person opening it midday and the others answering later.
+- **Joining or leaving the group** is the only membership there is. A new member counts at once, so matches wait for them (the "Waiting on" list shows their name, and the movies others cleared are dealt to them first). Someone who leaves stops counting, and matches recalculate.
+- A group of one is allowed: every Not seen is a match.
 
 ### Answering
 
-1. The app deals a deck: movies matching filters, minus anything any participant has seen.
-2. Each participant answers on their own device, one movie at a time, with two big buttons: **Seen** / **Not seen**. Swipe gestures are an optional extra, never the only input. No hearts, crosses, or like/dislike styling.
-   - **Seen** adds the movie to that user's seen list and eliminates it from the session. Others see this on their next refresh (a few seconds).
-   - A Seen answer on a movie someone else already eliminated **still updates your seen list**. A late Not seen on an eliminated movie is recorded but can't match; Undo takes it back like any answer.
-3. A movie is a **match** when every current participant has answered **Not seen** and none of them has it in their seen list. Matches are derived from answers only; filters and catalog data decide only what gets dealt next, so a catalog sync can't break an existing shortlist.
-4. At **5 matches** the app prompts the group to review the shortlist: each person sees it when the shared count reaches 5 during their visit, through their own answer or a poll (decided 2026-10-12; once per group would need stored state). Not a hard stop: the first match is viewable as soon as it exists, and people can keep going ("Find more").
-5. People can answer at different times and resume where they left off.
+1. The deck deals one movie at a time, with two big buttons: **Seen** / **Not seen**, plus Undo. Swipe gestures are an optional extra, never the only input. No hearts, crosses, or like/dislike styling.
+   - **Seen** adds the movie to your seen list. It's gone from everyone's deck and can never match in any of your groups. Others see this on their next refresh (a few seconds).
+   - **Not seen** is remembered for 2 weeks (see above).
+2. A movie is a **match** for a group when **every current member** has a Not seen for it from the last 2 weeks, nobody in the group has it on their seen list, and the group hasn't marked it watched. Matches are derived from answers only, never stored; preferences and catalog data decide only what gets dealt, so a catalog sync can't break a match.
+3. Matches show up live while the deck is open. At **3 matches** (default, 2026-10-13; was 5) each person is prompted to review the shortlist when the shared count reaches 3 during their visit. It's not a hard stop: the first match is viewable as soon as it exists, and **Find more** keeps going.
+4. **Waiting on {names}:** below the matches, movies that at least two members have answered Not seen, that nobody has seen, and that some members haven't answered yet, labeled with who hasn't. They're not matches and don't count toward the prompt. Why: everyone counts, so one person who isn't answering would otherwise block every match; this way the rest of the group still sees what's close, and the missing person gets those cards first when they open the app.
+5. **We watched this** on a match removes it from that group's matches for good (an undoable group record, "Watched" list on the group page). It doesn't touch anyone's seen list, because not every member may have watched it.
+6. People answer at different times and pick up where they left off. Inactivity is never treated as Not seen.
 
-### Session states (show the right one)
-
-Each is a distinct message and UI state:
-
-- **You're caught up, waiting for others:** you've answered everything available; others still have movies to answer. Shown as one screen ("You're caught up. Waiting for Sam and Alex to answer."), by nickname (decided 2026-10-12, stage 7): every participant draws from the same eligible pool, so when you have nothing left, the remaining candidates are exactly the ones waiting on others. Derived by asking each other participant's deck for one card. Never suggest loosening filters here.
-- **No eligible movies:** you and everyone else have answered everything: the filtered pool is truly exhausted. Suggesting which filter to loosen from actual remaining counts is deferred to stage 9, when the full catalog makes those counts meaningful (decided 2026-10-12).
-- **Something failed:** a request error. Distinguish "saving…" from "failed, retry" (a failed save), and a failed poll ("Can't reach Vunu. Trying again…", retried by itself).
-
-### Participants
-
-- Joining a running session requires the person to **accept the invite**. That's the only confirmation; it has nothing to do with answering movies. Built in stage 7 (decided 2026-10-12): the people the host ticks get invited participations (`joined_at` null) and see "Join the session" on the group page, then "{host} invited you" with the filters, who's in, and **Join**. Until they accept they don't count: their seen list doesn't filter the deck and matches don't wait for them, so someone who never opens the app can't stall the session. Stage 8 adds the remaining rules (removal, rejoining).
-- The host can **remove** a participant. Removing someone **deletes their answers in that session**, and matches recalculate from the remaining participants.
-- Each join is a separate **participation** (its own ID). Rejoining starts fresh, and requests tied to an earlier participation are rejected.
-- A session always has at least one participant. If the host leaves the session or group, the longest-standing participant becomes host; if nobody is left, the session closes. Leaving a group removes the person from that group's active session.
-- Inactivity is never treated as "Not seen".
-
-### Deck ordering
+### Deck order
 
 Sort key, in order:
 
-1. **Previously matched movies last:** movies that were matches when one of this group's earlier sessions closed. Only history recorded **before this session started** counts, so another session can't reshuffle this one. Why: the rest of the order is fixed, so without this rule the next session with the same filters deals the same cards first and ends with the shortlist the group already passed on. Invisible in the UI.
-2. **Most Not seen confirmations** from other participants first ("finish what's started"), so each answer is likely to complete a match.
-3. **TMDB vote count**, descending (a proxy for how well-known a movie is; well-known movies are most likely seen, so they get eliminated fast).
-4. **Movie ID** as a stable tie-breaker.
+1. **Movies others in the group already said Not seen first**, most confirmations first ("finish what's started"). These come whatever your preferences are, because your one tap can finish a match.
+2. Then **new movies that fit your preferences**, **best rated first**: TMDB's rating as a Bayesian (IMDb-style) weighted rating, `(votes × rating + 500 × 6.5) / (votes + 500)`, so a 9.0 from 250 votes doesn't jump ahead of an 8.4 from 30,000.
+3. **Movie ID** as a stable tie-breaker.
 
-Other rules:
+Excluded: movies anyone in the group has seen, movies you answered Not seen in the last 2 weeks, the group's watched movies, unreleased movies (US), and movies under the vote floor of **200** (one named constant; revisit with the full catalog in stage 9).
 
+Rules (decided 2026-10-12/13):
+
+- **Never skip or bury a movie because it's popular and we guess people have seen it.** Every movie that fits is dealt eventually, in quality order. (Ordering by an estimated chance of being seen was simulated and ruled out by the owner.)
 - **No cursors or page offsets.** Each fetch asks for "the top few eligible movies I haven't answered, excluding the ones already on my screen." Rankings shift as people answer, so a saved position would skip movies.
-- **The visible card never changes under you; queued cards refresh freely** (decided 2026-10-11). A card swapping as you tap would record your answer on a movie you didn't read, so only the visible card is fixed. Behind it the browser keeps a small queue (about 5, posters preloaded) so the next card appears instantly; every save response replaces that queue with the server's current top picks, excluding the visible card and answers still saving, which lets newly half-confirmed movies jump forward. Saves go out in the background, one at a time and in order. If someone else eliminates the visible card meanwhile, it **stays, with no note**: answering it works as usual, and the matches show the outcome (decided 2026-10-12, replacing an automatic skip that moved the card as people tapped; the owner judged a "someone has seen this" note useless information).
-- Minimum vote count floor of **200** (decided 2026-10-11; one named constant in the deck module, revisit with the full catalog in stage 9) to avoid obscure titles. Unreleased movies (US) excluded.
-- TMDB **popularity** (a daily activity score) and TMDB **trending** (separate day/week lists) are different metrics. Neither is used in v1.
-- **Validate the ordering** once real data exists: measure time to first match and answers needed to reach 5 matches.
+- **The visible card never changes under you; queued cards refresh freely** (decided 2026-10-11). Behind the visible card the browser keeps a small queue (about 5, posters preloaded) that every save response replaces. If someone else eliminates the visible card meanwhile, it stays, with no note (decided 2026-10-12).
+- TMDB **popularity** and **trending** are different metrics; neither is used.
+- **Validate the ordering** once real data exists: measure time to first match and answers needed to reach 3 matches.
 
-### Past-match history
+### Preferences (were filters; decided 2026-10-13)
 
-- Recorded **only when a session closes**: whatever is a match at that moment is saved for the group. Matches undone before closing are never recorded. Reading data never records history. Stage 6 records on **End session** (and when a new session replaces it); stage 8 adds auto-close. Changing filters doesn't close a session, so it records nothing.
+- **Runtime** (max minutes), **genre** (any of), **release year** (range). Movies missing runtime or a release year are excluded only when that preference is set.
+- **Personal:** each person sets their own, and Vunu remembers them for that person (across groups) until changed. Nobody else sees or controls them.
+- **A preference only picks your new movies.** Movies the group has already started (others said Not seen) still reach you, so two people with different preferences still form matches. The screen says so in plain words, e.g. "In the mood for" with a line like "You'll also get movies your group has already started, so your answer can finish a match."
+- The matches list shows **all** of the group's matches, the ones fitting your preferences first, then by weighted rating.
+- Why (2026-10-13): with strict personal filters, a comedy fan and a horror fan would never be dealt the same movies, so no match could form. Shared group filters bring back the question of who controls them.
 
-### Filters (v1)
+### States to show
 
-- **Runtime** (max minutes), **genre**, **release year** (range). Minimum TMDB rating was dropped from v1 (decided 2026-10-11).
-- Multiple genres mean **any of** (OR).
-- Movies missing runtime or a release year are excluded only when that filter is active.
-- Stored as typed nullable columns on `watch_sessions` (section 3), not JSON.
-- Later: minimum rating, actor (and whether it means top-billed only), age rating, trending mode.
+- **You're caught up, waiting for others:** you've answered everything available to you; others still have movies to answer. "You're caught up. Waiting for Sam and Alex." By nickname.
+- **No movies left:** nothing fits your preferences that you haven't answered. Suggest loosening them (counts come with the full catalog in stage 9).
+- **Something failed:** distinguish "saving…" from "failed, retry", and a failed poll ("Can't reach Vunu. Trying again…").
 
 ### Fixing mistakes and managing data
 
-- **Undo** is always visible while answering. Each person has their own undo stack **per session**; repeated undo steps back through that person's actions in that session only.
-  - Undoing a Seen removes the seen entry only if **this action was the last one to confirm it**. If a later action (another session, the My Seen Movies page) confirmed it again, the entry stays.
-  - Undoing a Not seen withdraws that confirmation, so the movie may leave the shortlist.
+- **Undo** is always visible while answering. It steps back through **your own answers**, newest first.
+  - Undoing a Seen removes the seen entry only if **this action was the last one to confirm it**. If a later action (another group's deck, the Seen movies page) confirmed it again, the entry stays.
+  - Undoing a Not seen withdraws it, so the movie may leave the matches.
   - The undone movie comes back as the visible card, so it can be answered again.
-- **"Actually, I've seen this"** on shortlist items: recorded as a Seen answer that replaces your Not seen, so it's on your undo stack like any other answer.
+- **"Actually, I've seen this"** on a match: recorded as a Seen answer that replaces your Not seen, on your undo stack like any other answer.
 - **My Seen Movies** page: search by title, filter (genre, year, etc.), remove entries.
-- **Removing a seen entry lets your earlier Not seen answers count again.** They were your own answers, so if the Seen was a mistake, they're correct. (Deliberate rule; no extra invalidation logic.)
+- **Removing a seen entry lets your earlier Not seen answers count again** (if still within 2 weeks). They were your own answers, so if the Seen was a mistake, they're correct. (Deliberate rule; no extra invalidation logic.)
 - All seen-list changes (answers, undo, corrections, page edits) go through **one server module**.
 - Always show year and poster (remakes share titles).
 - **Where to watch:** an external link only, to TMDB's watch page (`https://www.themoviedb.org/movie/{id}/watch?locale=US`), with no promise the movie is actually available. TMDB asks apps to link there because it holds the provider deep links. Showing provider names in our own UI was considered and dropped (2026-10-11): TMDB's provider data needs JustWatch attribution and frequent refreshes.
 
 ### Scope
 
-**v1:** auth, groups, one active session per group with Resume/Start fresh, host and "who's watching tonight", invites, host removal, host transfer, 24-hour auto-close, v1 filters (runtime, genre, year), Seen/Not seen answering, shortlist with review prompt and Find more, deck ordering including past-match deprioritizing, per-session undo, shortlist correction, My Seen Movies page, the four session states, unreleased excluded, where-to-watch link.
+**v1:** auth, groups, the group deck (no sessions), Seen/Not seen answering with Not seen remembered for 2 weeks, personal preferences (runtime, genre, year), best-rated deck order with finish-what's-started, live matches with the 3-match prompt and Find more, Waiting on {names}, We watched this, undo, "Actually, I've seen this", My Seen Movies page, the deck states, unreleased excluded, where-to-watch link.
 
-**Later:** optional warm-up for new users (about 50 most-rated movies), Letterboxd CSV import, "allow 1 person who's seen it" leniency for big groups (off by default), actor/age-rating/trending filters, IMDb/Rotten Tomatoes scores via OMDb, verified streaming availability, real-time updates, TV shows.
+**Later:** splitting new movies between members ("scouting": each person gets a different next-best new movie when nothing is half-finished; simulated to save 25–40% of cards for 4+ people answering at once; add if real nights feel slow), re-checking an expired Not seen with one tap instead of re-dealing it, Letterboxd CSV import, "allow 1 person who's seen it" leniency for big groups (off by default; simulations found it slows strict matches), actor/age-rating/trending preferences, IMDb/Rotten Tomatoes scores via OMDb, verified streaming availability, real-time updates, TV shows. Simulated and dropped (2026-10-13): an onboarding "tap the posters you've seen" grid, a third "Not for me" answer, and quietly boosting other members' preferences in your deck.
 
 ## 2. Movie data: TMDB with our own catalog copy
 
@@ -128,7 +117,7 @@ Other rules:
 
 ## 3. Data model (starting point, to refine together)
 
-**Naming:** the product's "session" (finding a movie together) is a **watch session** in schema and code, because `sessions` is Better Auth's login-session table (decided Sep 30 2026, stage 3). The UI still says "session".
+**Naming:** the product's "session" (finding a movie together) is a **watch session** in schema and code, because `sessions` is Better Auth's login-session table (decided Sep 30 2026, stage 3). The UI still says "session". Stage 8 retires watch sessions (section 1); the tables below stay as built until then.
 
 - **users** (+ `seen_version` counter), plus Better Auth's other tables: **sessions** (login sessions), **accounts**, **verifications** (sign-in codes), **rate_limits**. Better Auth's `usePlural` option gives these plural names to match ours (`user` would also be a reserved word in Postgres).
 - **groups** (ID generated by the browser with the create action, so a retried create lands on the same group; name; `invite_code`, unique), **group_members** (group, user, role owner/member, nickname, joined_at; primary key (group, user); unique (group, lower(nickname)); a partial unique index allows one owner per group), **invite_lookup_limits** (per-user window and count). Built in stage 5.
@@ -141,21 +130,31 @@ Other rules:
 - **group_past_matches** (group, movie, recorded_at), written when a session closes. Built in stage 6 (recorded on End session); stage 8 adds auto-close
 - The **shortlist is derived**, never stored.
 
+**Stage 8 changes (planned 2026-10-13, section 1):**
+
+- **not_seen_movies** (user, movie, answered_at, `last_confirmed_by_action`), primary key (user, movie): your Not seen answers. A row counts while `answered_at` is within 2 weeks; expiry is computed in queries, so no job deletes rows (old rows can be pruned with the stage 9 jobs). Answering Seen deletes your row for that movie; answering Not seen again refreshes `answered_at`.
+- **user_preferences** (user, max runtime, year range, `genre_ids integer[]`): typed nullable columns, like the old session filters. One row per user, shared across groups.
+- **group_watched_movies** (group, movie, marked_by, created_at), primary key (group, movie): "We watched this".
+- **groups.revision** counter for polling: bumped by membership changes and We watched this. Answers bump the answering user's counter instead (`users.seen_version` covers Not seen answers too; renaming it is an implementation choice).
+- **Retired:** `watch_sessions`, `watch_session_participants`, `watch_session_answers`, `group_past_matches`. Stage 8 stops reading and writing them; a later deploy drops them (migrations must keep working with the previous deployment). Answers from stage 6–7 sessions are not carried over: a Not seen lasts 2 weeks anyway, and seen lists are untouched.
+- New `actions` types for Not seen answers, undo, preferences, and We watched this, with a `group_id` (the deck the answer came from) for the undo stack and stale-request checks.
+
 ## 4. Correctness rules
 
-- **Authorization:** each operation checks the permission it needs. Answering and undo require an active participation; accepting an invite requires a pending invite; viewing a session (including closed ones) requires group membership; seen-list edits only need to be your own list; host actions require being host. Viewing or changing a group requires membership, and a non-member gets the same "not found" as for a missing group, so group IDs reveal nothing; owner actions require being owner; joining requires the group's current invite code. The acting user always comes from the login session, never from request data.
+- **Authorization:** each operation checks the permission it needs. From stage 8 (section 1), answering, undo, We watched this, and reading a deck or its matches require membership in that group; preferences are your own. Until then: answering and undo require an active participation; accepting an invite requires a pending invite; viewing a session (including closed ones) requires group membership; seen-list edits only need to be your own list; host actions require being host. Viewing or changing a group requires membership, and a non-member gets the same "not found" as for a missing group, so group IDs reveal nothing; owner actions require being owner; joining requires the group's current invite code. The acting user always comes from the login session, never from request data.
 - **Idempotency:** every mutation carries a client-generated **action ID**. Retrying a request that already succeeded returns the stored result and changes nothing.
   - Server: `runAction` (`#lib/server/actions.ts`) logs the action and applies the change in one transaction, returning `applied`, `duplicate` (a retry; nothing changes), or `conflict` (the ID was used for a different action). A failed change rolls back its log entry, so only successful actions are recorded and a retry of a failure runs normally. A double submit waits on the primary key and is applied once.
   - Browser: one action ID per intended change, kept until the server answers. After an error with an unknown outcome (dropped connection, server error), trying again resends the same ID. Seen-list edits have no result worth storing (the page reloads its data); a `result` column comes with the first action that needs one.
 - **Transactions:** each mutation (answer, undo, participant change, seen-list edit) runs in one transaction that bumps **every counter it affects**. A Seen answer changes both the session and the user's seen list, so it bumps `watch_sessions.revision` and `users.seen_version`.
 - **Stale requests:** answers carry their participation ID and movie ID. Requests for an old participation or a closed session are rejected. A late Not seen on an eliminated movie is recorded but can't match; a Seen always updates the seen list.
 - **Driver:** one TCP connection pool (see section 5b); transactions work over it directly.
-- **Required tests:** simultaneous answers on the same movie, retry after a successful save, action ID reused with different input, undo conflicts (Seen confirmed again elsewhere), cross-session seen updates, participant removal and rejoin, host leaving, stale poll responses, session closure.
+- **Required tests (stage 8):** matches across members' answers, 2-week expiry at the boundary, different preferences still forming matches, joining and leaving the group mid-deck, the Waiting on list, We watched this and its undo, undo across groups, simultaneous answers, retries, and stale poll responses.
+- **Required tests (stages 6–7):** simultaneous answers on the same movie, retry after a successful save, action ID reused with different input, undo conflicts (Seen confirmed again elsewhere), cross-session seen updates, participant removal and rejoin, host leaving, stale poll responses, session closure.
 
 ## 5. Updates between users: polling, designed to be swappable
 
 - v1 uses **polling**, not WebSockets. Small groups, a few seconds of delay is fine, and Vercel serverless can't hold WebSocket connections. WebSockets would still need all of the consistency logic below (phones drop connections), plus a separate service and channel auth. Revisit only if real use shows the delay bothers people.
-- **Change detection with a fingerprint:** the poll compares a small fingerprint built from the session's `revision` plus each active participant's `seen_version`. A seen-list change bumps only that user's counter, and every session they're in notices automatically. No cross-session writes or locking.
+- **Change detection with a fingerprint:** from stage 8 the poll compares a fingerprint of the group's `revision` plus each member's answer counter (section 3); answers are facts about a person, so one answer updates every group that person is in, with no cross-group writes. Until then: the session's `revision` plus each active participant's `seen_version`. A seen-list change bumps only that user's counter, and every session they're in notices automatically. No cross-session writes or locking.
 - When the fingerprint changed, the server returns full state and the new fingerprint from **one consistent read**.
 - The client applies only the response to its **latest** request. Polls never overlap.
 - **Coordinate polling with saves:** while a save (or undo) is in flight, pause polling and discard any refresh response that started before the save, so it can't overwrite the save's result. Refresh once the save completes. **Numbers (decided 2026-10-12, stage 7):** every 2.5 s while the deck is open and visible, multiplying by 1.5 per unchanged reply up to 10 s, back to 2.5 s after any change or your own save; paused in the background; immediately on focus, visibility, or reconnect; a failed poll doubles the wait (up to 10 s) and shows "Can't reach Vunu".
@@ -212,7 +211,14 @@ Not needed for v1: WebSockets or real-time services, Redis, job queues (BullMQ),
 
 ## 7. Open details to decide together
 
-- How auto-close runs (checked on read vs. a scheduled job)
+Stage 8 defaults taken on 2026-10-13, to confirm with the owner before building:
+
+- Review prompt at **3** matches instead of 5 (simulations: about a third fewer cards, same match quality).
+- **We watched this** hides the movie from the group's matches without touching anyone's seen list (rather than adding it to every member's seen list).
+- Preferences are **per person across all groups**, not per group.
+- Old stage 6–7 Not seen answers are **not** migrated.
+
+No longer needed (2026-10-13): how auto-close runs (there are no sessions to close).
 
 Resolved in stage 7 (2026-10-12): polling intervals and backoff (section 5).
 
@@ -237,7 +243,7 @@ Design the schema with the whole spec in mind, but build features in stages. Eac
 5. **Groups and invites.** Create a group, invite someone, permission checks. _Done when:_ a second account can join your group, and a test proves non-members can't read or change it.
 6. **Solo session.** Session in a group with just you: deck query and ordering (including past matches, recorded on End session), filters, Seen/Not seen, matches, shortlist with review prompt and "Actually, I've seen this", undo, where-to-watch link, End session and Change filters. Adopts shadcn-svelte and converts the existing pages to its primitives. _Done when:_ you can find unseen movies alone start to finish, and tests cover deck order, seen exclusion, filters, and undo conflicts.
 7. **Group sessions.** Multiple participants, polling fingerprint, the four session states. _Done when:_ two browsers on different accounts see each other's answers within seconds and reach a shared match, and tests cover simultaneous answers, stale poll responses, and polling during saves.
-8. **Session lifecycle.** Accepting session invites, host removal and transfer, rejoining, Resume/Start fresh, 24-hour auto-close, past matches. _Done when:_ each rule in the spec's Participants and Sessions sections has a passing test.
+8. **Group deck (replaces "Session lifecycle", decided 2026-10-13).** Replace watch sessions with the group deck (section 1): remembered Not seen answers (2 weeks), best-rated deck order, personal preferences that only pick new movies, matches and Waiting on {names} on the group page, the 3-match prompt, We watched this, undo across your own answers, polling by group. Remove the session pages, host, invites and filters screens, and stop writing the session tables (dropped in a later deploy). Update AGENTS.md. _Done when:_ two accounts with different preferences reach a match from the group page with no setup; a Not seen older than 2 weeks no longer counts; a member who hasn't answered shows up in Waiting on; and the required tests in section 4 pass.
 9. **Full catalog sync.** Partitioned seed, enrichment, scheduled GitHub Actions job, alerts. _Done when:_ the full catalog is loaded, a scheduled run succeeds, an interrupted run resumes, and a forced failure sends an alert.
 10. **Launch.** TMDB attribution and terms check, production email provider, error pages, ordering metrics. Revisit: branch protection on `main` requiring the CI `verify` check (until then changes reach `main` by direct push or PR), and moving CI off the pinned `ubuntu-24.04` runner. _Done when:_ you and your brother use it for a real movie night.
 
@@ -245,7 +251,7 @@ Design the schema with the whole spec in mind, but build features in stages. Eac
 
 _As of 2026-10-12, written for the merge of `stage-7-group-sessions-ongwnp` into `main` ([PR #4](https://github.com/joepetrillo/vunu/pull/4))._
 
-**Stages 1–7 are done.** Live at [vunu.app](https://vunu.app): email-code sign-in, the seen list, groups with invites by link or code, solo watch sessions (stage 6), and group sessions (stage 7: pick who's watching, invitees accept, live updates by polling, shared matches, caught-up / waiting by name, Change filters in place). The **next stage is 8 (session lifecycle)**; see the build order above.
+**Stages 1–7 are done.** Live at [vunu.app](https://vunu.app): email-code sign-in, the seen list, groups with invites by link or code, solo watch sessions (stage 6), and group sessions (stage 7: pick who's watching, invitees accept, live updates by polling, shared matches, caught-up / waiting by name, Change filters in place). The **next stage is 8**, redesigned on 2026-10-13 as the **group deck** (section 1); see the build order above.
 
 - **Stage 7 verification:** on the branch's Preview deployment on 2026-10-12, by an automated two-browser Playwright run with two throwaway `delivered+…@resend.dev` accounts (a shared match reached the other screen in about 0.2 s; a session end in about 2.3 s), and by the owner on a phone, whose feedback changed Change filters and the ruled-out card (section 1). PR #4 got a Codex review (two findings, both fixed). Merging deploys Production, whose build applies the two stage 7 migrations; afterwards start a session with two accounts once on `vunu.app` as a smoke check.
 - **Deployments:** `main` deploys Production; every other pushed branch gets a Vercel Preview with its own Neon database branch (section 5b). Previews need Vercel login (or a share link). Add Vercel env vars with the CLI or REST API, not the dashboard (section 5b, Kit 3 dashboard bug).
@@ -331,6 +337,8 @@ Entries below are dated implementation history. The current status is summarized
     - Waiting-for-others runs one small deck query per other participant, only when you have nothing left. Fine for small groups; revisit with the full catalog.
     - Some Vercel previews for this branch failed with `git_info_fail` before building (Vercel couldn't read the commit, during a GitHub incident); a redeploy once GitHub recovered built.
     - Stage 6's "matches are counted by listing them" is resolved: the deck carries a count (`countMatches`).
+
+- **Stage 8 — redesigned, not built (2026-10-13).** Branch `claude/stage-8-session-lifecycle-njsyqp`. Started with patch updates (zod, typescript-eslint); Kit, the adapter, and Drizzle were current. The planned lifecycle work (invites, removal, host transfer, Resume/Start fresh, auto-close) was dropped: the owner asked for something disposable that works whenever anyone opens it. Sessions are replaced by the group deck with remembered answers (section 1). Simulations compared deck orders, card vs grid, expiry lengths, absent members, preferences, and big-group rules (project files `stage-8/algorithm.md` and `stage-8/explore/report.md`). Owner decisions: everyone in the group counts; Not seen lasts 2 weeks; best rated first with no guessing who has seen what; preferences are personal and only pick new movies; the one-card deck stays.
 
 - **Audit — implemented and reviewed (2026-10-03; [PR #1](https://github.com/joepetrillo/vunu/pull/1)).** Inspected the current application and retained its route/form-action, pooled TCP database, and idempotent mutation design. Added disposable test configuration/migrations, encrypted OTP storage and a restricted auth surface, hosted email safeguards, database connection recovery/timeout handling, stale-action URL protection, deliberate missing-movie responses, sign-in/sign-out failure recovery and focus management, and validated/transactional catalog import coverage. CI now exercises browser journeys. Exact findings, versions, checks, limitations, and separate rollout steps are in `docs/AUDIT.md`. Only `main` deploys now (`vercel.json`); PRs get CI only. The first encrypted-OTP deployment requires a fresh code afterward; codes issued by the preceding plaintext version are incompatible. This does not complete stage 4's live-site check or implement later stages. Follow-ups:
   - On the next Drizzle upgrade, recheck whether a failed transaction `BEGIN` still leaks its pool connection (`docs/AUDIT.md`, remaining question 3).
