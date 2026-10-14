@@ -32,6 +32,13 @@ const writePaths = [
       "Change watch sessions only through #lib/server/watch-sessions.ts (it checks participation and bumps the revision).",
   },
   {
+    owner: "src/lib/server/group-deck.ts",
+    selector:
+      "CallExpression[callee.property.name=/^(insert|update|delete)$/][arguments.0.name=/^(notSeenMovies|groupWatchedMovies)$/]",
+    message:
+      "Change Not seen answers and watched movies only through #lib/server/group-deck.ts (it logs the action and bumps the counters polling reads).",
+  },
+  {
     owner: "src/lib/server/actions.ts",
     selector:
       "CallExpression[callee.property.name=/^(insert|update|delete)$/][arguments.0.name='actions']",

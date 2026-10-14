@@ -58,9 +58,13 @@ export function removeFromSeenList(
   });
 }
 
-// Only called when the list really changed: a no-op shouldn't make watch
-// sessions refresh.
-async function bumpSeenVersion(tx: Transaction, userId: string): Promise<void> {
+// Only called when the list really changed: a no-op shouldn't make decks
+// refresh. Also bumped by the group deck's Not seen answers (group-deck.ts):
+// the counter stands for everything about the user a deck shows.
+export async function bumpSeenVersion(
+  tx: Transaction,
+  userId: string
+): Promise<void> {
   await tx
     .update(users)
     .set({ seenVersion: sql`${users.seenVersion} + 1` })

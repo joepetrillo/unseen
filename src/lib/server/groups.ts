@@ -179,6 +179,7 @@ export function joinGroup(
       await tx
         .insert(groupMembers)
         .values({ groupId, userId, role: "member", nickname });
+      await notifyGroupChanged(tx, groupId);
     },
     { beforeNew }
   );
@@ -209,7 +210,9 @@ export function leaveGroup(db: Db, change: GroupChange): Promise<GroupOutcome> {
       .limit(1);
     if (next === undefined) {
       await tx.delete(groups).where(eq(groups.id, groupId));
-    } else if (me.role === "owner") {
+      return;
+    }
+    if (me.role === "owner") {
       await tx
         .update(groupMembers)
         .set({ role: "owner" })
@@ -220,6 +223,7 @@ export function leaveGroup(db: Db, change: GroupChange): Promise<GroupOutcome> {
           )
         );
     }
+    await notifyGroupChanged(tx, groupId);
   });
 }
 
@@ -239,14 +243,16 @@ export function removeMember(
   return runGroupAction(db, action, async (tx) => {
     await requireOwner(tx, groupId, userId);
     if (memberId === userId) throw new Refusal("cannot_remove_self");
-    await tx
+    const removed = await tx
       .delete(groupMembers)
       .where(
         and(
           eq(groupMembers.groupId, groupId),
           eq(groupMembers.userId, memberId)
         )
-      );
+      )
+      .returning({ userId: groupMembers.userId });
+    if (removed.length > 0) await notifyGroupChanged(tx, groupId);
   });
 }
 
@@ -330,7 +336,25 @@ export function setNickname(
       .where(
         and(eq(groupMembers.groupId, groupId), eq(groupMembers.userId, userId))
       );
+    // The deck shows nicknames ("Waiting on Sam").
+    await notifyGroupChanged(tx, groupId);
   });
+}
+
+/**
+ * The group deck's live-update seam (spec section 5): every change to who's
+ * in a group, and to its watched movies, calls this in its transaction.
+ * Bumps the revision the deck's polling compares. Answers bump the
+ * answering user's counter instead (see seen-list.ts).
+ */
+export async function notifyGroupChanged(
+  tx: Transaction,
+  groupId: string
+): Promise<void> {
+  await tx
+    .update(groups)
+    .set({ revision: sql`${groups.revision} + 1` })
+    .where(eq(groups.id, groupId));
 }
 
 // ---------------------------------------------------------------------------
