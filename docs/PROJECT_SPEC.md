@@ -41,7 +41,7 @@ Stages 6–7 built **watch sessions**: a host, who's watching, invites, End sess
    - **Seen** adds the movie to your seen list. It's gone from everyone's deck and can never match in any of your groups. Others see this on their next refresh (a few seconds).
    - **Not seen** is remembered for 2 weeks (see above).
 2. A movie is a **match** for a group when **every current member** has a Not seen for it from the last 2 weeks, nobody in the group has it on their seen list, and the group hasn't marked it watched. Matches are derived from answers only, never stored; preferences and catalog data decide only what gets dealt, so a catalog sync can't break a match.
-3. Matches show up live while the deck is open. At **3 matches** (default, 2026-10-13; was 5) each person is prompted to review the shortlist when the shared count reaches 3 during their visit. It's not a hard stop: the first match is viewable as soon as it exists, and **Find more** keeps going.
+3. Matches show up live while the deck is open. At **5 matches** each person is prompted to review the shortlist when the shared count reaches 5 during their visit (owner kept 5 on 2026-10-14; simulations suggested 3 would save about a third of the cards). It's not a hard stop: the first match is viewable as soon as it exists, and **Find more** keeps going.
 4. **Waiting on {names}:** below the matches, movies that at least two members have answered Not seen, that nobody has seen, and that some members haven't answered yet, labeled with who hasn't. They're not matches and don't count toward the prompt. Why: everyone counts, so one person who isn't answering would otherwise block every match; this way the rest of the group still sees what's close, and the missing person gets those cards first when they open the app.
 5. **We watched this** on a match removes it from that group's matches for good (an undoable group record, "Watched" list on the group page). It doesn't touch anyone's seen list, because not every member may have watched it.
 6. People answer at different times and pick up where they left off. Inactivity is never treated as Not seen.
@@ -62,7 +62,7 @@ Rules (decided 2026-10-12/13):
 - **No cursors or page offsets.** Each fetch asks for "the top few eligible movies I haven't answered, excluding the ones already on my screen." Rankings shift as people answer, so a saved position would skip movies.
 - **The visible card never changes under you; queued cards refresh freely** (decided 2026-10-11). Behind the visible card the browser keeps a small queue (about 5, posters preloaded) that every save response replaces. If someone else eliminates the visible card meanwhile, it stays, with no note (decided 2026-10-12).
 - TMDB **popularity** and **trending** are different metrics; neither is used.
-- **Validate the ordering** once real data exists: measure time to first match and answers needed to reach 3 matches.
+- **Validate the ordering** once real data exists: measure time to first match and answers needed to reach 5 matches.
 
 ### Preferences (were filters; decided 2026-10-13)
 
@@ -93,7 +93,7 @@ Rules (decided 2026-10-12/13):
 
 ### Scope
 
-**v1:** auth, groups, the group deck (no sessions), Seen/Not seen answering with Not seen remembered for 2 weeks, personal preferences (runtime, genre, year), best-rated deck order with finish-what's-started, live matches with the 3-match prompt and Find more, Waiting on {names}, We watched this, undo, "Actually, I've seen this", My Seen Movies page, the deck states, unreleased excluded, where-to-watch link.
+**v1:** auth, groups, the group deck (no sessions), Seen/Not seen answering with Not seen remembered for 2 weeks, personal preferences (runtime, genre, year), best-rated deck order with finish-what's-started, live matches with the 5-match prompt and Find more, Waiting on {names}, We watched this, undo, "Actually, I've seen this", My Seen Movies page, the deck states, unreleased excluded, where-to-watch link.
 
 **Later:** splitting new movies between members ("scouting": each person gets a different next-best new movie when nothing is half-finished; simulated to save 25–40% of cards for 4+ people answering at once; add if real nights feel slow), re-checking an expired Not seen with one tap instead of re-dealing it, Letterboxd CSV import, "allow 1 person who's seen it" leniency for big groups (off by default; simulations found it slows strict matches), actor/age-rating/trending preferences, IMDb/Rotten Tomatoes scores via OMDb, verified streaming availability, real-time updates, TV shows. Simulated and dropped (2026-10-13): an onboarding "tap the posters you've seen" grid, a third "Not for me" answer, and quietly boosting other members' preferences in your deck.
 
@@ -211,11 +211,7 @@ Not needed for v1: WebSockets or real-time services, Redis, job queues (BullMQ),
 
 ## 7. Open details to decide together
 
-Stage 8 defaults taken on 2026-10-13, to confirm with the owner before building:
-
-- Review prompt at **3** matches instead of 5 (simulations: about a third fewer cards, same match quality).
-- **We watched this** hides the movie from the group's matches without touching anyone's seen list (rather than adding it to every member's seen list).
-- Old stage 6–7 Not seen answers are **not** migrated.
+Stage 8 defaults confirmed by the owner on 2026-10-14: the review prompt stays at **5** matches; **We watched this** hides the movie from the group's matches without touching anyone's seen list; old stage 6–7 Not seen answers are **not** migrated. Preferences are per visit (section 1).
 
 No longer needed (2026-10-13): how auto-close runs (there are no sessions to close).
 
@@ -242,7 +238,7 @@ Design the schema with the whole spec in mind, but build features in stages. Eac
 5. **Groups and invites.** Create a group, invite someone, permission checks. _Done when:_ a second account can join your group, and a test proves non-members can't read or change it.
 6. **Solo session.** Session in a group with just you: deck query and ordering (including past matches, recorded on End session), filters, Seen/Not seen, matches, shortlist with review prompt and "Actually, I've seen this", undo, where-to-watch link, End session and Change filters. Adopts shadcn-svelte and converts the existing pages to its primitives. _Done when:_ you can find unseen movies alone start to finish, and tests cover deck order, seen exclusion, filters, and undo conflicts.
 7. **Group sessions.** Multiple participants, polling fingerprint, the four session states. _Done when:_ two browsers on different accounts see each other's answers within seconds and reach a shared match, and tests cover simultaneous answers, stale poll responses, and polling during saves.
-8. **Group deck (replaces "Session lifecycle", decided 2026-10-13).** Replace watch sessions with the group deck (section 1): remembered Not seen answers (2 weeks), best-rated deck order, personal preferences that only pick new movies, matches and Waiting on {names} on the group page, the 3-match prompt, We watched this, undo across your own answers, polling by group. Remove the session pages, host, invites and filters screens, and stop writing the session tables (dropped in a later deploy). Update AGENTS.md. _Done when:_ two accounts with different preferences reach a match from the group page with no setup; a Not seen older than 2 weeks no longer counts; a member who hasn't answered shows up in Waiting on; and the required tests in section 4 pass.
+8. **Group deck (replaces "Session lifecycle", decided 2026-10-13).** Replace watch sessions with the group deck (section 1): remembered Not seen answers (2 weeks), best-rated deck order, personal preferences that only pick new movies, matches and Waiting on {names} on the group page, the 5-match prompt, We watched this, undo across your own answers, polling by group. Remove the session pages, host, invites and filters screens, and stop writing the session tables (dropped in a later deploy). Update AGENTS.md. _Done when:_ two accounts with different preferences reach a match from the group page with no setup; a Not seen older than 2 weeks no longer counts; a member who hasn't answered shows up in Waiting on; and the required tests in section 4 pass.
 9. **Full catalog sync.** Partitioned seed, enrichment, scheduled GitHub Actions job, alerts. _Done when:_ the full catalog is loaded, a scheduled run succeeds, an interrupted run resumes, and a forced failure sends an alert.
 10. **Launch.** TMDB attribution and terms check, production email provider, error pages, ordering metrics. Revisit: branch protection on `main` requiring the CI `verify` check (until then changes reach `main` by direct push or PR), and moving CI off the pinned `ubuntu-24.04` runner. _Done when:_ you and your brother use it for a real movie night.
 
