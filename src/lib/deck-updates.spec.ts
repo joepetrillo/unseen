@@ -1,11 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { DeckState, PollReply } from "#lib/watch-fields.ts";
-import {
-  FASTEST_MS,
-  SLOWEST_MS,
-  subscribeToWatchSession,
-} from "#lib/watch-session-updates.ts";
+import type { DeckState, PollReply } from "#lib/deck-fields.ts";
+import { FASTEST_MS, SLOWEST_MS, subscribeToDeck } from "#lib/deck-updates.ts";
 
 // The poll loop's timing and race rules, with fake timers and a fake server
 // whose replies the test releases one at a time.
@@ -17,7 +13,6 @@ function state(fingerprint: string): DeckState {
     canUndo: false,
     fingerprint,
     waitingOn: null,
-    filters: "Any length · All genres · Any year",
   };
 }
 
@@ -62,9 +57,9 @@ function fakeServer() {
 function subscribe(server: ReturnType<typeof fakeServer>) {
   const onChange = vi.fn();
   const onConnection = vi.fn();
-  const subscription = subscribeToWatchSession("session-1", {
+  const subscription = subscribeToDeck("/groups/g1/find/poll", {
     fingerprint: "f0",
-    query: () => ({ participationId: "p1" }),
+    query: () => ({ exclude: "7" }),
     onChange,
     onConnection,
     fetch: server.fetch,
@@ -80,14 +75,14 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("subscribeToWatchSession", () => {
+describe("subscribeToDeck", () => {
   it("sends the fingerprint it has, and reports only changes", async () => {
     const server = fakeServer();
     const { subscription, onChange } = subscribe(server);
 
     await vi.advanceTimersByTimeAsync(FASTEST_MS);
     expect(server.requests[0]?.url).toContain("since=f0");
-    expect(server.requests[0]?.url).toContain("participationId=p1");
+    expect(server.requests[0]?.url).toContain("exclude=7");
     await server.answer({ status: "unchanged" });
     expect(onChange).not.toHaveBeenCalled();
 
@@ -162,7 +157,7 @@ describe("subscribeToWatchSession", () => {
     await vi.advanceTimersByTimeAsync(FASTEST_MS);
     // The poll is out; then you answer a card.
     const release = subscription.hold();
-    // The stale reply describes the session before your answer.
+    // The stale reply describes the deck before your answer.
     await server.answer(changed("before-save"));
     expect(onChange).not.toHaveBeenCalled();
 
@@ -208,7 +203,7 @@ describe("subscribeToWatchSession", () => {
     );
     const onChange = vi.fn();
     const onConnection = vi.fn();
-    const subscription = subscribeToWatchSession("session-1", {
+    const subscription = subscribeToDeck("/groups/g1/find/poll", {
       fingerprint: "f0",
       query: () => ({}),
       onChange,
@@ -230,11 +225,11 @@ describe("subscribeToWatchSession", () => {
     const signInPage = new Response("<html></html>");
     Object.defineProperties(signInPage, {
       redirected: { value: true },
-      url: { value: "https://vunu.test/sign-in?redirectTo=%2Fsessions" },
+      url: { value: "https://vunu.test/sign-in?redirectTo=%2Fgroups" },
     });
     const fetch = vi.fn(() => Promise.resolve(signInPage));
     const onChange = vi.fn();
-    subscribeToWatchSession("session-1", {
+    subscribeToDeck("/groups/g1/find/poll", {
       fingerprint: "f0",
       query: () => ({}),
       onChange,
@@ -247,7 +242,7 @@ describe("subscribeToWatchSession", () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 
-  it("stops once the session has ended for you", async () => {
+  it("stops once you have left the group", async () => {
     const server = fakeServer();
     const { onChange } = subscribe(server);
 

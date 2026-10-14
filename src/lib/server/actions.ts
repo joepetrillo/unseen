@@ -17,6 +17,8 @@ interface InputsByType {
   group_reset_invite: { groupId: string };
   group_remove_member: { groupId: string; memberId: string };
   group_set_nickname: { groupId: string; nickname: string };
+  // Watch sessions (stages 6–7), retired in stage 8. Nothing logs these any
+  // more; they stay while the log still holds them.
   watch_session_start: {
     groupId: string;
     watchSessionId: string;

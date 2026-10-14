@@ -1,5 +1,5 @@
 <script module lang="ts">
-  // Checkboxes styled as chips (genres here, people on the start screen).
+  // Checkboxes styled as chips.
   export const CHIP =
     "cursor-pointer rounded-4xl border px-4 py-2 text-sm font-medium transition-colors select-none has-checked:border-primary has-checked:bg-primary has-checked:text-primary-foreground has-focus-visible:ring-[3px] has-focus-visible:ring-ring/50";
 </script>
@@ -10,22 +10,22 @@
   import { NativeSelect } from "#lib/components/ui/native-select/index.ts";
   import {
     formatRuntime,
+    type Preferences,
     RUNTIME_CHOICES,
-    type WatchFilters,
     YEAR_MAX,
     YEAR_MIN,
-  } from "#lib/watch-fields.ts";
+  } from "#lib/deck-fields.ts";
 
   interface Props {
     genres: { id: number; name: string }[];
     /** What the fields start out showing. */
-    initial: WatchFilters;
+    initial: Preferences;
   }
 
   let { genres, initial }: Props = $props();
 
   // Writable deriveds: the fields can be edited, and reset if `initial`
-  // changes (another group, or another session).
+  // changes (another group, say).
   let runtime = $derived(
     initial.maxRuntime === null ? "" : String(initial.maxRuntime)
   );
@@ -34,8 +34,7 @@
   let genreIds = $derived([...initial.genreIds]);
 </script>
 
-<!-- The filter fields of the start and Change filters forms. All optional:
-     untouched, they mean no filters. -->
+<!-- The preference fields. All optional: untouched, they mean anything. -->
 <Field.Field>
   <Field.Label for="runtime">Length</Field.Label>
   <NativeSelect

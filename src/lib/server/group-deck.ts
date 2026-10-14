@@ -26,6 +26,7 @@ import { DatabaseError } from "pg";
 
 import {
   type DeckState,
+  describePreferences,
   hasPreferences,
   type MovieCard,
   type PollReply,
@@ -564,6 +565,24 @@ export async function getCard(
     .where(eq(movies.id, movieId));
   const [card] = await withGenres(db, rows);
   return card ?? null;
+}
+
+/** "Up to 2 h · Comedy · 1990–2009" (or "Anything"), for the deck's header. */
+export async function describeDeckPreferences(
+  db: Db | Transaction,
+  preferences: Preferences
+): Promise<string> {
+  const names =
+    preferences.genreIds.length === 0
+      ? []
+      : await db
+          .select({ id: genres.id, name: genres.name })
+          .from(genres)
+          .where(inArray(genres.id, preferences.genreIds));
+  return describePreferences(
+    preferences,
+    new Map(names.map((genre) => [genre.id, genre.name]))
+  );
 }
 
 /** Whether you have an answer from this group's deck left to undo. */

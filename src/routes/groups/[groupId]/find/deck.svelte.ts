@@ -4,11 +4,8 @@ import {
   type DeckState,
   type MovieCard,
   REVIEW_PROMPT_AT,
-} from "#lib/watch-fields.ts";
-import {
-  subscribeToWatchSession,
-  type WatchSessionSubscription,
-} from "#lib/watch-session-updates.ts";
+} from "#lib/deck-fields.ts";
+import { type DeckSubscription, subscribeToDeck } from "#lib/deck-updates.ts";
 
 export type Answer = "seen" | "not_seen";
 
@@ -39,7 +36,7 @@ const UNDO_FAILED = "Couldn't undo. Check your connection and try again.";
 
 /**
  * The deck on screen: the visible card, a short queue behind it, and the
- * answers on their way to the server (spec section 1, "Deck ordering").
+ * answers on their way to the server (spec section 1, "Deck order").
  *
  * - Answering shows the next card at once; the save goes out in the
  *   background. Saves are sent one at a time, in order, each with an action
@@ -69,54 +66,54 @@ export class Deck {
   /** A save failed with no answer from the server; `retry()` resends it. */
   error = $state<string | null>(null);
   undoError = $state<string | null>(null);
-  /** The session refused a change (it ended, say): only a reload helps. */
+  /** The server refused a change (you left the group, say): only a reload helps. */
   refused = $state<string | null>(null);
   /** Turns on when matches reach REVIEW_PROMPT_AT during this visit. */
   reviewPrompt = $state(false);
   /** The latest answer, so the card can leave in that answer's direction. */
   lastAnswer = $state<Answer>("not_seen");
   /**
-   * With nothing left for you to answer: who still has movies to answer.
-   * Empty means nobody does (the filters are used up); null, not known yet.
+   * With nothing left for you to answer: who your matches wait on. Empty
+   * means nobody (your preferences used up the pool); null, not known yet.
    */
   waitingOn = $state.raw<string[] | null>(null);
   /** The last poll didn't reach the server. */
   offline = $state(false);
-  /** The session's filters, described; the host can change them. */
-  filters = $state("");
 
   // What the server last said about undo; unsent answers add to it.
   #serverCanUndo = $state(false);
-  readonly #participationId: string;
+  // The page's preferences as a query string: sent with every answer and
+  // poll, so the server deals the same way the page does.
+  readonly #preferences: string;
   // Plain fields: nothing on screen reads them directly.
   #saves: Save[] = [];
   #sending = false;
   #whenIdle: (() => void)[] = [];
   #undoId: string | null = null;
   #fingerprint: string;
-  #updates: WatchSessionSubscription | null = null;
+  #updates: DeckSubscription | null = null;
 
-  constructor(participationId: string, state: DeckState) {
-    this.#participationId = participationId;
+  constructor(state: DeckState, preferences: string) {
+    this.#preferences = preferences;
     this.cards = state.cards;
     this.matchCount = state.matchCount;
     this.#serverCanUndo = state.canUndo;
     this.waitingOn = state.waitingOn;
-    this.filters = state.filters;
     this.#fingerprint = state.fingerprint;
   }
 
   /**
    * Starts following other people's changes; returns the function that
-   * stops. `onEnded` runs when the session ends or you're no longer in it.
+   * stops. `onEnded` runs when you're no longer in the group.
    */
-  connect(watchSessionId: string, onEnded: () => void): () => void {
-    const updates = subscribeToWatchSession(watchSessionId, {
+  connect(pollUrl: string, onEnded: () => void): () => void {
+    const updates = subscribeToDeck(pollUrl, {
       fingerprint: this.#fingerprint,
-      query: () => ({
-        participationId: this.#participationId,
-        ...this.#held(),
-      }),
+      // A query string: preferences can repeat a name (genreIds).
+      query: () => {
+        const held = `exclude=${encodeURIComponent(this.#held())}`;
+        return this.#preferences === "" ? held : `${this.#preferences}&${held}`;
+      },
       onChange: (reply) => {
         if (reply.status === "changed") this.#apply(reply.state);
         else onEnded();
@@ -140,7 +137,7 @@ export class Deck {
     return this.#serverCanUndo || this.pending > 0;
   }
 
-  /** Nothing left to deal for these filters, and nothing still saving. */
+  /** Nothing left to deal you, and nothing still saving. */
   get exhausted(): boolean {
     return this.cards.length === 0 && this.pending === 0 && !this.saving;
   }
@@ -157,7 +154,7 @@ export class Deck {
 
   /**
    * Waits for the answers on their way to the server. True once every one
-   * is saved; false if one failed (it waits for Retry) or the session
+   * is saved; false if one failed (it waits for Retry) or the server
    * refused it.
    */
   async settle(): Promise<boolean> {
@@ -191,9 +188,8 @@ export class Deck {
       await this.#idle();
       if (this.#stopped()) return;
       this.#undoId ??= crypto.randomUUID();
-      const result = await postUndo({
+      const result = await postUndo(this.#preferences, {
         actionId: this.#undoId,
-        participationId: this.#participationId,
       });
       if (result === null || result.type === "error") {
         // Unknown outcome: keep the ID, so trying again can't undo twice.
@@ -233,12 +229,11 @@ export class Deck {
         save !== undefined;
         save = this.#saves[0]
       ) {
-        const result = await postAnswer({
+        const result = await postAnswer(this.#preferences, {
           actionId: save.actionId,
-          participationId: this.#participationId,
           movieId: String(save.card.id),
           answer: save.answer,
-          ...this.#held(),
+          exclude: this.#held(),
         });
         // No answer from the server: the save may have gone through, so it
         // stays first in line with its ID, for `retry()`.
@@ -250,7 +245,7 @@ export class Deck {
         this.pending = this.#saves.length;
         if (result.type === "failure") {
           // A movie that left the catalog is just skipped; anything else
-          // (the session ended, you were removed) stops the deck.
+          // (you left or were removed from the group) stops the deck.
           if (result.data?.code === "movie_not_found") continue;
           this.refused = result.data?.message ?? SAVE_FAILED;
           this.#saves = [];
@@ -270,15 +265,13 @@ export class Deck {
   }
 
   // What the deck holds, for the server: the card on screen and the answers
-  // still waiting, which the next deal must skip.
-  #held(): { exclude: string } {
+  // still waiting, which the next deal must skip. Comma-separated IDs.
+  #held(): string {
     const visible = this.card;
-    return {
-      exclude: [
-        ...(visible === undefined ? [] : [visible.id]),
-        ...this.#saves.map((waiting) => waiting.card.id),
-      ].join(","),
-    };
+    return [
+      ...(visible === undefined ? [] : [visible.id]),
+      ...this.#saves.map((waiting) => waiting.card.id),
+    ].join(",");
   }
 
   // A save's or poll's reply: fresh cards replace the queue behind the
@@ -295,7 +288,6 @@ export class Deck {
     );
     this.cards = visible === undefined ? fresh : [visible, ...fresh];
     this.waitingOn = waitingOn;
-    this.filters = state.filters;
     if (this.matchCount < REVIEW_PROMPT_AT && matchCount >= REVIEW_PROMPT_AT) {
       this.reviewPrompt = true;
     }
@@ -326,13 +318,17 @@ export class Deck {
  */
 async function post(
   action: "answer" | "undo",
+  preferences: string,
   fields: Record<string, string>
 ): Promise<ActionResult | null> {
   const body = new FormData();
   for (const [name, value] of Object.entries(fields)) body.set(name, value);
   try {
-    // A relative URL: the action on the current page.
-    const response = await fetch(`?/${action}`, {
+    // The action on the current page. A bare "?/answer" would replace the
+    // page's query and lose the preferences, so they go in front: Kit reads
+    // the first key starting with "/" as the action's name.
+    const prefix = preferences === "" ? "" : `${preferences}&`;
+    const response = await fetch(`?${prefix}/${action}`, {
       method: "POST",
       body,
       headers: { "x-sveltekit-action": "true" },
@@ -344,16 +340,16 @@ async function post(
 }
 
 // Kit can't type a reply read by hand; these name what each action in
-// +page.server.ts returns (its success value, or a watchRefusal failure).
-function postAnswer(fields: Record<string, string>) {
-  return post("answer", fields) as Promise<ActionResult<
+// +page.server.ts returns (its success value, or a deckRefusal failure).
+function postAnswer(preferences: string, fields: Record<string, string>) {
+  return post("answer", preferences, fields) as Promise<ActionResult<
     Plain<DeckState>,
     Plain<Refusal>
   > | null>;
 }
 
-function postUndo(fields: Record<string, string>) {
-  return post("undo", fields) as Promise<ActionResult<
+function postUndo(preferences: string, fields: Record<string, string>) {
+  return post("undo", preferences, fields) as Promise<ActionResult<
     Plain<UndoReply>,
     Plain<Refusal>
   > | null>;

@@ -108,34 +108,37 @@ export function hasPreferences(preferences: Preferences): boolean {
   );
 }
 
-/** "Up to 2 h · Comedy, Drama · 1990–2009", or "Anything" for none. */
+/** "Comedy, Drama · Up to 2 h · 1990–2009", or "Anything" for none. */
 export function describePreferences(
   preferences: Preferences,
   genreNames: ReadonlyMap<number, string>
 ): string {
-  if (!hasPreferences(preferences)) return "Anything";
-  const length =
-    preferences.maxRuntime === null
-      ? "Any length"
-      : `Up to ${formatRuntime(preferences.maxRuntime)}`;
-  const genres =
-    preferences.genreIds.length === 0
-      ? "All genres"
-      : preferences.genreIds
-          .map((id) => genreNames.get(id) ?? "Unknown")
-          .join(", ");
+  // Only the parts that are set: "Comedy · Up to 2 h" reads better than
+  // "Up to 2 h · Comedy · Any year".
+  const parts: string[] = [];
+  if (preferences.genreIds.length > 0) {
+    parts.push(
+      preferences.genreIds
+        .map((id) => genreNames.get(id) ?? "Unknown")
+        .join(", ")
+    );
+  }
+  if (preferences.maxRuntime !== null) {
+    parts.push(`Up to ${formatRuntime(preferences.maxRuntime)}`);
+  }
   const { minYear, maxYear } = preferences;
-  const years =
-    minYear === null && maxYear === null
-      ? "Any year"
-      : minYear === null
+  if (minYear !== null || maxYear !== null) {
+    parts.push(
+      minYear === null
         ? `Up to ${String(maxYear)}`
         : maxYear === null
           ? `${String(minYear)} or later`
           : minYear === maxYear
             ? String(minYear)
-            : `${String(minYear)}–${String(maxYear)}`;
-  return [length, genres, years].join(" · ");
+            : `${String(minYear)}–${String(maxYear)}`
+    );
+  }
+  return parts.length === 0 ? "Anything" : parts.join(" · ");
 }
 
 /** 135 → "2 h 15 min". */

@@ -1,19 +1,20 @@
-import { type PollReply, pollReplySchema } from "#lib/watch-fields.ts";
+import { type PollReply, pollReplySchema } from "#lib/deck-fields.ts";
 
 // The browser's side of live updates (spec section 5). It polls today; a
-// real-time service would replace this module and the server's
-// notifyWatchSessionChanged, while the fingerprint stays as the safety net.
+// real-time service would replace this module and the server's counters
+// (notifyGroupChanged, users.seen_version), while the fingerprint stays as
+// the safety net.
 
 /** Poll this often while things change, backing off to SLOWEST when idle. */
 export const FASTEST_MS = 2500;
 export const SLOWEST_MS = 10_000;
 const BACKOFF = 1.5;
 
-export interface WatchSessionSubscription {
+export interface DeckSubscription {
   /**
    * Pauses polling while a change is being saved. Call the returned function
    * once the server has answered: a poll that started before the save could
-   * describe the session without it, so its reply is thrown away, and a
+   * describe the deck without it, so its reply is thrown away, and a
    * fresh poll follows.
    */
   hold(): () => void;
@@ -25,9 +26,9 @@ export interface WatchSessionSubscription {
 interface Options {
   /** The fingerprint of the state on screen. */
   fingerprint: string;
-  /** The rest of the poll's query (the participation, cards on screen). */
-  query: () => Record<string, string>;
-  /** Something changed, or the session ended for you (then polling stops). */
+  /** The rest of the poll's query (preferences, cards on screen). */
+  query: () => string | Record<string, string>;
+  /** Something changed, or you left the group (then polling stops). */
   onChange: (reply: Exclude<PollReply, { status: "unchanged" }>) => void;
   /** Whether the last poll reached the server. */
   onConnection?: (ok: boolean) => void;
@@ -36,15 +37,15 @@ interface Options {
 }
 
 /**
- * Polls the session, one request at a time, and reports only changes. Fast
- * while things change, slower while they don't, paused while the page is in
- * the background or a save is on its way, and immediate when the page comes
- * back into view or the connection returns.
+ * Polls a group's deck at `pollUrl`, one request at a time, and reports only
+ * changes. Fast while things change, slower while they don't, paused while
+ * the page is in the background or a save is on its way, and immediate when
+ * the page comes back into view or the connection returns.
  */
-export function subscribeToWatchSession(
-  watchSessionId: string,
+export function subscribeToDeck(
+  pollUrl: string,
   options: Options
-): WatchSessionSubscription {
+): DeckSubscription {
   const request = options.fetch ?? fetch.bind(globalThis);
   let fingerprint = options.fingerprint;
   let delay = FASTEST_MS;
@@ -114,15 +115,12 @@ export function subscribeToWatchSession(
   }
 
   async function get(): Promise<PollReply | null> {
-    const params = new URLSearchParams({
-      ...options.query(),
-      since: fingerprint,
-    });
+    const params = new URLSearchParams(options.query());
+    params.set("since", fingerprint);
     try {
-      const response = await request(
-        `/sessions/${watchSessionId}/poll?${params.toString()}`,
-        { headers: { accept: "application/json" } }
-      );
+      const response = await request(`${pollUrl}?${params.toString()}`, {
+        headers: { accept: "application/json" },
+      });
       // Signed out (the session expired): the poll was redirected to the
       // sign-in page. Reloading the page takes the person there and back.
       if (

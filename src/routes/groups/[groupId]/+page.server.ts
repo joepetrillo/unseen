@@ -1,8 +1,19 @@
 import { error, fail, redirect } from "@sveltejs/kit";
 import { z } from "zod";
 
+import { preferencesFromQuery } from "#lib/deck-fields.ts";
 import { groupNameSchema, nicknameSchema } from "#lib/group-fields.ts";
 import { db } from "#lib/server/db/index.ts";
+import { deckRefusal, movieIdSchema } from "#lib/server/deck-forms.ts";
+import {
+  answerMovie,
+  type DeckOutcome,
+  listMatches,
+  listWaitingOn,
+  listWatched,
+  markWatched,
+  unmarkWatched,
+} from "#lib/server/group-deck.ts";
 import { readForm, refusal, refusalMessage } from "#lib/server/group-forms.ts";
 import {
   deleteGroup,
@@ -15,10 +26,6 @@ import {
   setNickname,
 } from "#lib/server/groups.ts";
 import { requireUser } from "#lib/server/require-user.ts";
-import {
-  getActiveWatchSessionId,
-  getWatchSession,
-} from "#lib/server/watch-sessions.ts";
 
 import type { Actions, PageServerLoad, RequestEvent } from "./$types";
 
@@ -31,25 +38,19 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
   // Same answer for "no such group" and "not your group", so a stranger
   // can't learn which IDs exist.
   if (group === null) error(404, "Group not found.");
-  const activeId = await getActiveWatchSessionId(db, group.id);
-  const active =
-    activeId === null ? null : await getWatchSession(db, activeId, user.id);
+  const [matches, waitingOn, watched] = await Promise.all([
+    // Coming from the deck, the URL carries tonight's preferences: the
+    // matches that fit them come first.
+    listMatches(db, group.id, preferencesFromQuery(url.searchParams)),
+    listWaitingOn(db, group.id),
+    listWatched(db, group.id),
+  ]);
   return {
     group,
     inviteUrl: `${url.origin}/join/${group.inviteCode}`,
-    activeWatchSession:
-      active === null
-        ? null
-        : {
-            id: active.id,
-            // Yours to continue, an invitation to accept, or other people's.
-            mine:
-              active.participation !== null
-                ? ("participating" as const)
-                : active.invitation !== null
-                  ? ("invited" as const)
-                  : ("outside" as const),
-          },
+    matches,
+    waitingOn,
+    watched,
   };
 };
 
@@ -85,6 +86,32 @@ async function groupAction<T extends z.ZodObject>(
 }
 
 const actionId = z.uuid();
+
+const movieSchema = z.object({ actionId, movieId: movieIdSchema });
+
+/** Like groupAction, for the group deck's changes on this page. */
+async function deckAction(
+  { request, locals, params }: RequestEvent,
+  change: (input: {
+    actionId: string;
+    movieId: number;
+    userId: string;
+    groupId: string;
+  }) => Promise<DeckOutcome>
+) {
+  const user = requireUser(locals);
+  const groupId = z.uuid().safeParse(params.groupId);
+  if (!groupId.success) {
+    return fail(404, { message: refusalMessage("not_found") });
+  }
+  const form = await readForm(request, movieSchema);
+  if (!form.ok) return form.failure;
+  return (
+    deckRefusal(
+      await change({ ...form.data, userId: user.id, groupId: groupId.data })
+    ) ?? undefined
+  );
+}
 
 export const actions = {
   rename: (event) =>
@@ -123,4 +150,10 @@ export const actions = {
       (input) => deleteGroup(db, input),
       { thenHome: true }
     ),
+  watched: (event) => deckAction(event, (input) => markWatched(db, input)),
+  unwatched: (event) => deckAction(event, (input) => unmarkWatched(db, input)),
+  // "Actually, I've seen this": a Seen answer that replaces your Not seen,
+  // on your undo stack like any other answer.
+  seen: (event) =>
+    deckAction(event, (input) => answerMovie(db, { ...input, answer: "seen" })),
 } satisfies Actions;

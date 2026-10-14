@@ -9,12 +9,12 @@
     formatRuntime,
     type MovieCard,
     whereToWatchUrl,
-  } from "#lib/watch-fields.ts";
+  } from "#lib/deck-fields.ts";
 
   interface Props {
     matches: MovieCard[];
     /**
-     * Extra controls for each row ("Actually, I've seen this"). A snippet
+     * Extra controls for each row ("We watched this"). A snippet
      * prop: like a React render prop, the parent decides the markup.
      */
     actions?: Snippet<[MovieCard]>;
