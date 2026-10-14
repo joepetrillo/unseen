@@ -42,6 +42,13 @@ interface InputsByType {
   watch_answer_seen: { participationId: string; movieId: number };
   watch_answer_not_seen: { participationId: string; movieId: number };
   watch_answer_undo: { participationId: string };
+  // The group deck (stage 8). An answer is about the person, but it carries
+  // the group whose deck it came from: that's the undo stack it joins.
+  answer_seen: { groupId: string; movieId: number };
+  answer_not_seen: { groupId: string; movieId: number };
+  answer_undo: { groupId: string };
+  group_mark_watched: { groupId: string; movieId: number };
+  group_unmark_watched: { groupId: string; movieId: number };
 }
 
 /**

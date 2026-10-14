@@ -230,6 +230,10 @@ export const groups = pgTable("groups", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
+  // Bumped by membership changes and We watched this, so the group deck's
+  // polling can tell when to reload. Answers bump the answering user's
+  // counter instead (users.seen_version), since they count in every group.
+  revision: integer("revision").default(0).notNull(),
 });
 
 export const groupRole = pgEnum("group_role", ["owner", "member"]);
@@ -280,6 +284,57 @@ export const inviteLookupLimits = pgTable("invite_lookup_limits", {
   }).notNull(),
   count: integer("count").notNull(),
 });
+
+// Each user's Not seen answers (stage 8). Like a Seen, an answer is a fact
+// about the person, so it counts in every group they're in, but only for 2
+// weeks: people watch movies elsewhere and never tell Vunu. Expiry is a
+// condition in the queries, so no job has to delete old rows. Changed only
+// through #lib/server/group-deck.ts.
+export const notSeenMovies = pgTable(
+  "not_seen_movies",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // No cascade, like seen_movies: catalog deletes must not erase answers.
+    movieId: integer("movie_id")
+      .notNull()
+      .references(() => movies.id),
+    // Answering Not seen again moves it forward, restarting the 2 weeks.
+    answeredAt: timestamp("answered_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    // The answer that last set this row, like seen_movies: undoing it
+    // removes the row only if no later answer confirmed it again.
+    lastConfirmedByAction: uuid("last_confirmed_by_action").notNull(),
+  },
+  // Also the index for "this user's Not seen answers", since user_id comes first.
+  (t) => [primaryKey({ columns: [t.userId, t.movieId] })]
+);
+
+// "We watched this": the group's record that it watched a match, so the
+// movie leaves the group's matches and deck for good. It doesn't touch
+// anyone's seen list, because not every member may have watched it. Changed
+// only through #lib/server/group-deck.ts.
+export const groupWatchedMovies = pgTable(
+  "group_watched_movies",
+  {
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    movieId: integer("movie_id")
+      .notNull()
+      .references(() => movies.id),
+    // Kept when that person's account is deleted: the group still watched it.
+    markedBy: text("marked_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.groupId, t.movieId] })]
+);
 
 // A movie-finding session in a group ("watch session" in code, since
 // `sessions` is Better Auth's). Changed only through
@@ -429,6 +484,12 @@ export const actionType = pgEnum("action_type", [
   "watch_answer_seen",
   "watch_answer_not_seen",
   "watch_answer_undo",
+  // Stage 8, the group deck.
+  "answer_seen",
+  "answer_not_seen",
+  "answer_undo",
+  "group_mark_watched",
+  "group_unmark_watched",
 ]);
 
 // Every change a user makes, keyed by an ID the browser generates. A retried
@@ -480,6 +541,12 @@ export const actions = pgTable(
     index("actions_participation_id_idx")
       .on(t.participationId, t.createdAt)
       .where(sql`${t.participationId} is not null`),
+    // The group deck's undo stack: your answers in one group, newest first.
+    // Partial on group_id, not on the answer types: Postgres can't use enum
+    // values in the same migration that adds them.
+    index("actions_user_group_idx")
+      .on(t.userId, t.groupId, t.createdAt)
+      .where(sql`${t.groupId} is not null`),
   ]
 );
 
