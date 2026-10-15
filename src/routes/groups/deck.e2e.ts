@@ -141,7 +141,15 @@ function answer(page: Page, choice: "Seen" | "Not seen") {
 }
 
 function matchRows(page: Page) {
-  return page.locator("#matches").getByRole("listitem");
+  return page
+    .getByRole("region", { name: /^\d+ matches$/ })
+    .getByRole("listitem");
+}
+
+/** Picks one of a match's menu items ("We watched this"). */
+async function matchMenu(page: Page, movieTitle: string, item: string) {
+  await page.getByRole("button", { name: `More for ${movieTitle}` }).click();
+  await page.getByRole("menuitem", { name: item }).click();
 }
 
 test("two people with different preferences reach a match from the group page", async ({
@@ -194,7 +202,7 @@ test("two people with different preferences reach a match from the group page", 
   ).toBe("applied");
   await expect(alex.getByRole("link", { name: "Matches 1" })).toBeVisible(LIVE);
 
-  // On the group page: where to watch, then We watched this.
+  // On the matches screen: where to watch, then We watched this.
   await alex.getByRole("link", { name: "Matches 1" }).click();
   await expect(matchRows(alex)).toHaveCount(1);
   await expect(
@@ -203,11 +211,17 @@ test("two people with different preferences reach a match from the group page", 
     "href",
     `https://www.themoviedb.org/movie/${String(comedy.movies[0]?.id)}/watch?locale=US`
   );
-  await alex
-    .getByRole("button", { name: `We watched ${title(comedy, 0)}` })
-    .click();
+  await matchMenu(alex, title(comedy, 0), "We watched this");
   await expect(matchRows(alex)).toHaveCount(0);
-  await expect(alex.getByRole("heading", { name: "Watched" })).toBeVisible();
+  // It's on the group's Watched screen, with Undo.
+  await alex.getByRole("link", { name: "Movie night" }).click();
+  await alex.getByRole("link", { name: /^Watched/ }).click();
+  await alex
+    .getByRole("button", { name: `We haven't watched ${title(comedy, 0)}` })
+    .click();
+  await expect(
+    alex.getByRole("button", { name: `We haven't watched ${title(comedy, 0)}` })
+  ).toBeHidden();
 });
 
 test("answers alone with undo and a correction", async ({ page }) => {
@@ -235,9 +249,7 @@ test("answers alone with undo and a correction", async ({ page }) => {
 
   await page.getByRole("link", { name: "Matches 2" }).click();
   await expect(matchRows(page)).toHaveCount(2);
-  await page
-    .getByRole("button", { name: `Actually, I've seen ${title(comedy, 1)}` })
-    .click();
+  await matchMenu(page, title(comedy, 1), "Actually, I've seen this");
   await expect(matchRows(page)).toHaveCount(1);
   await expect(matchRows(page).first()).toContainText(title(comedy, 2));
 
@@ -344,7 +356,7 @@ test("leaving the deck waits for answers still being saved", async ({
   await answer(page, "Not seen");
   await page.getByRole("link", { name: /^Matches/ }).click();
 
-  await expect(page).toHaveURL(/#matches$/);
+  await expect(page).toHaveURL(/\/matches(\?|$)/);
   await expect(matchRows(page)).toHaveCount(2);
 });
 

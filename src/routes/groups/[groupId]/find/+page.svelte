@@ -48,8 +48,8 @@
   let groupHref = $derived(resolve("/groups/[groupId]", groupId));
   let matchesHref = $derived(
     query === ""
-      ? resolve("/groups/[groupId]#matches", groupId)
-      : resolve(`/groups/[groupId]?${query}#matches` as const, groupId)
+      ? resolve("/groups/[groupId]/matches", groupId)
+      : resolve(`/groups/[groupId]/matches?${query}` as const, groupId)
   );
   let preferencesHref = $derived(
     query === ""

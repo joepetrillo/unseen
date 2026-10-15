@@ -1,5 +1,6 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
+  import { resolve } from "$app/paths";
   import Share08Icon from "@hugeicons/core-free-icons/Share08Icon";
   import { HugeiconsIcon } from "@hugeicons/svelte";
 
@@ -19,6 +20,12 @@
 
   // What the share button last did, shown next to it.
   let status = $state<string | null>(null);
+
+  // The card shows on the group page (while you're alone) and the members
+  // screen; the reset lives with the members screen's actions.
+  let resetAction = $derived(
+    resolve(`/groups/[groupId]/members?/resetInvite` as const, { groupId })
+  );
 
   const reset = new ActionForm({
     scope: () => groupId,
@@ -90,7 +97,7 @@
       <form
         class="flex flex-col"
         method="POST"
-        action="?/resetInvite"
+        action={resetAction}
         use:enhance={reset.submit}
       >
         <Button type="submit" variant="ghost" disabled={reset.saving}>

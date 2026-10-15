@@ -1,10 +1,15 @@
 import { type ActionFailure, fail } from "@sveltejs/kit";
 import { z } from "zod";
 
-import { RELOAD } from "#lib/server/forms.ts";
+import { readForm, RELOAD } from "#lib/server/forms.ts";
 import type { DeckOutcome } from "#lib/server/group-deck.ts";
+import {
+  type GroupActionEvent,
+  refusalMessage,
+} from "#lib/server/group-forms.ts";
+import { requireUser } from "#lib/server/require-user.ts";
 
-// Shared by the group deck's form actions (the deck and the group page).
+// Shared by the group deck's form actions (the deck, matches, and watched).
 
 const refusals: Record<
   Exclude<DeckOutcome, "applied" | "duplicate">,
@@ -46,3 +51,36 @@ export const movieIdSchema = z
   .string()
   .transform(Number)
   .pipe(z.int().positive());
+
+const movieFormSchema = z.object({
+  actionId: z.uuid(),
+  movieId: movieIdSchema,
+});
+
+/**
+ * Runs a deck change from a form on the matches or watched screen: reads
+ * the movie and action ID, then applies `change` to the group in the URL as
+ * the signed-in user. group-deck.ts checks membership.
+ */
+export async function deckAction(
+  { request, locals, params }: GroupActionEvent,
+  change: (input: {
+    actionId: string;
+    movieId: number;
+    userId: string;
+    groupId: string;
+  }) => Promise<DeckOutcome>
+) {
+  const user = requireUser(locals);
+  const groupId = z.uuid().safeParse(params.groupId);
+  if (!groupId.success) {
+    return fail(404, { message: refusalMessage("not_found") });
+  }
+  const form = await readForm(request, movieFormSchema);
+  if (!form.ok) return form.failure;
+  return (
+    deckRefusal(
+      await change({ ...form.data, userId: user.id, groupId: groupId.data })
+    ) ?? undefined
+  );
+}

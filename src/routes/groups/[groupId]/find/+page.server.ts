@@ -18,7 +18,6 @@ import {
   readDeckState,
   undoLastAnswer,
 } from "#lib/server/group-deck.ts";
-import { getGroupForMember } from "#lib/server/groups.ts";
 import { requireUser } from "#lib/server/require-user.ts";
 
 import type { Actions, PageServerLoad } from "./$types";
@@ -26,18 +25,13 @@ import type { Actions, PageServerLoad } from "./$types";
 // The group deck. Tonight's preferences live in this page's URL query
 // (?maxRuntime=120&genreIds=35), so they start fresh every time you come
 // from the group page and nothing about them is stored.
-export const load: PageServerLoad = async ({ params, locals, url }) => {
+export const load: PageServerLoad = async ({ parent, locals, url }) => {
   const user = requireUser(locals);
-  const groupId = z.uuid().safeParse(params.groupId);
-  const group = groupId.success
-    ? await getGroupForMember(db, groupId.data, user.id)
-    : null;
-  // Same answer for "no such group" and "not your group".
-  if (group === null) error(404, "Group not found.");
+  // The layout's membership check first (see ../+layout.server.ts).
+  const { group } = await parent();
 
   const preferences = preferencesFromQuery(url.searchParams);
   return {
-    group: { id: group.id, name: group.name },
     preferences,
     mood: await describeDeckPreferences(db, preferences),
     deck: await readDeckState(db, {

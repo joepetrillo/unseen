@@ -72,7 +72,7 @@ Stop/remove the example database with `docker stop vunu-test-db`. Never assign a
 | Seen-list UI and validation | `src/routes/seen/+page.svelte`, `+page.server.ts`, `SeenButton.svelte` |
 | Catalog/seen-list reads | `src/lib/server/movie-search.ts` |
 | Groups, members, invites | `src/lib/server/groups.ts` (only write path), `group-forms.ts`; pages in `src/routes/groups/`, `src/routes/join/`; field rules in `src/lib/group-fields.ts` |
-| Group deck: answers, undo, matches, We watched this | `src/lib/server/group-deck.ts` (only write path), `deck-forms.ts`; deck in `src/routes/groups/[groupId]/find/` (save queue in `deck.svelte.ts`, poll, preferences); matches, Almost, and Watched on the group page; preference rules in `src/lib/deck-fields.ts`; polling in `src/lib/deck-updates.ts` |
+| Group deck: answers, undo, matches, We watched this | `src/lib/server/group-deck.ts` (only write path), `deck-forms.ts`; deck in `src/routes/groups/[groupId]/find/` (save queue in `deck.svelte.ts`, poll, preferences); the group page is a hub (`+layout.server.ts` checks membership once) with matches, watched, members, and settings screens under it; preference rules in `src/lib/deck-fields.ts`; polling in `src/lib/deck-updates.ts` |
 | Atomic, idempotent writes | `src/lib/server/actions.ts`, `seen-list.ts`, `groups.ts`, `group-deck.ts`; browser action IDs in `src/lib/action-form.svelte.ts` |
 | UI components and layout | `src/lib/components/ui/` (shadcn-svelte, Maia style; ours to edit), `Page.svelte`, `ListGroup.svelte`; theme in `src/routes/layout.css` |
 | Database schema, relations, pool/TLS | `src/lib/server/db/`; migrations in `drizzle/` |

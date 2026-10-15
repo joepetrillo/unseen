@@ -14,7 +14,7 @@
   interface Props {
     matches: MovieCard[];
     /**
-     * Extra controls for each row ("We watched this"). A snippet
+     * Extra controls at the end of each row (a "More" menu). A snippet
      * prop: like a React render prop, the parent decides the markup.
      */
     actions?: Snippet<[MovieCard]>;
@@ -47,7 +47,7 @@
         <Item.Content class="min-w-0 gap-2">
           <Item.Title class="line-clamp-2">{movie.title}</Item.Title>
           <Item.Description>{details(movie)}</Item.Description>
-          <div class="mt-1 flex flex-wrap gap-2">
+          <div class="mt-1">
             <!-- rel="external": a page outside Vunu, opened in a new tab. -->
             <a
               class={buttonVariants({ variant: "outline", size: "sm" })}
@@ -57,9 +57,13 @@
             >
               Where to watch
             </a>
-            {@render actions?.(movie)}
           </div>
         </Item.Content>
+        {#if actions}
+          <Item.Actions class="-mr-2 self-start">
+            {@render actions(movie)}
+          </Item.Actions>
+        {/if}
       </Item.Root>
     </li>
   {/each}
