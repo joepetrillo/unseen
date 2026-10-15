@@ -16,12 +16,8 @@
          theme.svelte.spec.ts checks they agree. -->
     <script>
       (function () {
-        var choice = null;
-        try {
-          choice = localStorage.getItem("theme");
-        } catch (error) {
-          // Storage blocked: follow the device.
-        }
+        var choice = /(?:^|;\s*)theme=([^;]*)/.exec(document.cookie);
+        choice = choice && choice[1];
         var dark =
           choice === "dark" ||
           (choice !== "light" &&

@@ -33,35 +33,25 @@
       "Make a new invite? The current link and code will stop working.",
   });
 
-  // True while the share sheet is open. Plain `let`: nothing on screen
-  // shows it. iOS Safari allows one share sheet at a time and throws if
-  // `share()` is called again before the last one has fully closed (a quick
-  // second tap); its promise can also stay pending afterwards.
-  let shareSheetOpen = false;
-
-  // Phones open their share sheet (Messages, WhatsApp, …). Browsers without
-  // one, a tap while one is still open, and any share failure copy the link
-  // instead, so the button always does something useful.
+  // Phones open their share sheet (Messages, WhatsApp, …); browsers without
+  // one copy the link instead.
   async function share() {
     status = null;
     const text = `Join ${groupName} on Vunu (code ${code})`;
     // TypeScript's DOM types say every browser has `share`; desktop Firefox
     // doesn't, so check on a plain object.
-    if ("share" in (navigator as object) && !shareSheetOpen) {
-      shareSheetOpen = true;
-      try {
-        await navigator.share({ title: text, text, url });
-        return;
-      } catch (error) {
-        // Closing the share sheet without picking anything isn't a failure.
-        if (error instanceof DOMException && error.name === "AbortError") {
-          return;
-        }
-      } finally {
-        shareSheetOpen = false;
-      }
+    if (!("share" in (navigator as object))) {
+      await copyLink();
+      return;
     }
-    await copyLink();
+    try {
+      await navigator.share({ title: text, text, url });
+    } catch {
+      // Closing the sheet without picking anything, or a quick second tap:
+      // iOS Safari allows one sheet at a time and throws until the last has
+      // fully closed. Either way there's nothing to say, and the next tap
+      // simply tries again. No state is kept, so nothing can get stuck.
+    }
   }
 
   async function copyLink() {

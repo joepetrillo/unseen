@@ -21,14 +21,21 @@
 
   let code = $state("");
   let finding = $state(false);
-  const notInCode = new RegExp(`[^${INVITE_CODE_ALPHABET}]`, "g");
-  // Code characters in either case: typed lowercase is accepted, then
-  // uppercased by the binding below. Anything else never lands in a box.
-  const codeCharacters = `^[${INVITE_CODE_ALPHABET}${INVITE_CODE_ALPHABET.toLowerCase()}]+$`;
+  // Any letter or digit lands in a box, in either case (the binding below
+  // uppercases it). Codes leave out 0, O, 1, I, and L, but refusing those
+  // keys silently feels broken, so they're let in and explained instead.
+  const codeCharacters = "^[A-Za-z0-9]+$";
+  const notInCodes = new RegExp(`[^${INVITE_CODE_ALPHABET}]`);
+  let misread = $derived(notInCodes.test(code));
+  let message = $derived(
+    misread
+      ? "Invite codes don't use 0, O, 1, I, or L. Check the code you were sent."
+      : error
+  );
 
   // A pasted "k7q-m2x" becomes "K7QM2X" before it's cut to six characters.
   function cleanPaste(text: string) {
-    return text.toUpperCase().replace(notInCode, "");
+    return text.toUpperCase().replace(/[^A-Z0-9]/g, "");
   }
 </script>
 
@@ -36,7 +43,12 @@
 <form
   method="POST"
   action="?/find"
-  use:enhance={() => {
+  use:enhance={({ cancel }) => {
+    // No code has these characters: say so here instead of asking the server.
+    if (misread) {
+      cancel();
+      return;
+    }
     finding = true;
     return async ({ update }) => {
       try {
@@ -49,7 +61,7 @@
   }}
 >
   <Field.Group>
-    <Field.Field data-invalid={error !== undefined}>
+    <Field.Field data-invalid={message !== undefined}>
       <Field.Label for="{id}-code">Invite code</Field.Label>
       <CodeInput
         inputId="{id}-code"
@@ -62,12 +74,12 @@
         autocapitalize="characters"
         enterkeyhint="go"
         required
-        invalid={error !== undefined}
-        aria-describedby={error === undefined ? undefined : `${id}-error`}
+        invalid={message !== undefined}
+        aria-describedby={message === undefined ? undefined : `${id}-error`}
         bind:value={() => code, (typed: string) => (code = typed.toUpperCase())}
       />
-      {#if error}
-        <Field.Error id="{id}-error">{error}</Field.Error>
+      {#if message}
+        <Field.Error id="{id}-error">{message}</Field.Error>
       {/if}
     </Field.Field>
     <Button type="submit" size="lg" disabled={finding}>

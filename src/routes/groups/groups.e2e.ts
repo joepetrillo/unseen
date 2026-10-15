@@ -198,6 +198,14 @@ test("leaving hands ownership on; the owner can reset the invite", async ({
   );
   await expect(owner).toHaveURL("/join");
   await expect(input).toHaveValue(code);
+
+  // A character no code uses gets in, and is explained without a lookup.
+  await input.fill("k7qm21");
+  await expect(input).toHaveValue("K7QM21");
+  await expect(owner.getByRole("alert")).toHaveText(
+    "Invite codes don't use 0, O, 1, I, or L. Check the code you were sent."
+  );
+  await expect(owner).toHaveURL("/join");
 });
 
 test("an invite link survives signing in first", async ({ browser }) => {
