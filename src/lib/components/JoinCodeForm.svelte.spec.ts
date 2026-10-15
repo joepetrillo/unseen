@@ -17,19 +17,34 @@ beforeEach(() => {
   submitted.mockClear();
 });
 
-it("keeps only what can be in a code, uppercased, six at most", async () => {
+it("keeps letters and digits, uppercased, six at most", async () => {
   await render(JoinCodeForm, {});
   const input = page.getByLabelText("Invite code");
 
   await userEvent.click(input);
-  // 0, O, 1, I, L and punctuation never appear in codes.
-  await userEvent.keyboard("k7q-0o1il m2x");
+  // Punctuation and spaces never land in a box.
+  await userEvent.keyboard("k7q- m2x");
   await expect.element(input).toHaveValue("K7QM2X");
   // Once full, typing replaces the last box instead of growing the code.
   await userEvent.keyboard("9");
   await expect.element(input).toHaveValue("K7QM29");
   // Submitted once, when the sixth character landed.
   expect(submitted).toHaveBeenCalledOnce();
+});
+
+it("explains characters no code uses instead of dropping them", async () => {
+  await render(JoinCodeForm, {});
+  const input = page.getByLabelText("Invite code");
+
+  await userEvent.click(input);
+  await userEvent.keyboard("k7qm2i");
+  await expect.element(input).toHaveValue("K7QM2I");
+  await expect
+    .element(page.getByRole("alert"))
+    .toHaveTextContent(
+      "Invite codes don't use 0, O, 1, I, or L. Check the code you were sent."
+    );
+  await expect.element(input).toHaveAttribute("aria-invalid", "true");
 });
 
 it("cleans up a pasted code", async () => {
