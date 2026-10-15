@@ -717,9 +717,11 @@ async function waitingOnFor(
   return rows.map((row) => row.nickname);
 }
 
-// A short digest of the group's revision and each member's answer counter
-// (spec section 5). Answers bump only the answering user's counter, so every
-// group they're in notices without writing to any of them.
+// A short digest of the group's revision, each member's answer counter, and
+// how many of the members' Not seen answers still count (spec section 5).
+// Answers bump only the answering user's counter, so every group they're in
+// notices without writing to any of them. A Not seen expires with no write at
+// all, so the count is what notices that: it drops when one expires.
 async function fingerprintIn(
   tx: Transaction,
   groupId: string
@@ -737,7 +739,18 @@ async function fingerprintIn(
     .from(groupMembers)
     .innerJoin(users, eq(users.id, groupMembers.userId))
     .where(eq(groupMembers.groupId, groupId));
-  const source = `${String(group?.revision ?? "")}|${members?.versions ?? ""}`;
+  const [notSeen] = await tx
+    .select({ count: sql<number>`count(*)`.mapWith(Number) })
+    .from(notSeenMovies)
+    .innerJoin(
+      groupMembers,
+      and(
+        eq(groupMembers.userId, notSeenMovies.userId),
+        eq(groupMembers.groupId, groupId)
+      )
+    )
+    .where(fresh());
+  const source = `${String(group?.revision ?? "")}|${members?.versions ?? ""}|${String(notSeen?.count ?? 0)}`;
   return createHash("sha256").update(source).digest("base64url").slice(0, 16);
 }
 
