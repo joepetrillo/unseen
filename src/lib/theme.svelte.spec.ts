@@ -1,12 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import appHtml from "../app.html?raw";
-import {
-  applyTheme,
-  parseThemeChoice,
-  THEME_COOKIE,
-  Theme,
-} from "./theme.svelte.ts";
+import { applyTheme, THEME_STORAGE_KEY, Theme } from "./theme.svelte.ts";
 
 // The script in app.html paints the first frame; Theme and applyTheme take
 // over after that. If they ever disagreed, the page would flash or switch
@@ -36,28 +31,22 @@ const meta = document.createElement("meta");
 meta.name = "theme-color";
 document.head.append(meta);
 
-function clearCookie() {
-  document.cookie = `${THEME_COOKIE}=; path=/; max-age=0`;
-}
-
 afterEach(() => {
   vi.restoreAllMocks();
-  clearCookie();
+  localStorage.clear();
   document.documentElement.classList.remove("dark");
 });
 
 describe("the app.html script and Theme", () => {
   it("has a script to run", () => {
-    expect(script).toContain(`${THEME_COOKIE}=`);
+    expect(script).toContain(`localStorage.getItem("${THEME_STORAGE_KEY}")`);
   });
 
   for (const stored of [null, "light", "dark", "system", "sepia"]) {
     for (const dark of [false, true]) {
       it(`agree with ${String(stored)} stored on a ${dark ? "dark" : "light"} device`, () => {
         deviceIsDark(dark);
-        if (stored !== null) {
-          document.cookie = `${THEME_COOKIE}=${stored}; path=/`;
-        }
+        if (stored !== null) localStorage.setItem(THEME_STORAGE_KEY, stored);
 
         // The script runs as the page loads.
         // eslint-disable-next-line @typescript-eslint/no-implied-eval -- it's our own app.html.
@@ -71,10 +60,9 @@ describe("the app.html script and Theme", () => {
           stored === "dark" || (stored !== "light" && dark)
         );
 
-        // Then the app takes over, from the cookie as the server read it,
-        // without changing anything.
+        // Then the app takes over without changing anything.
         document.documentElement.classList.remove("dark");
-        applyTheme(new Theme(parseThemeChoice(stored)).dark);
+        applyTheme(new Theme().dark);
         expect({
           dark: document.documentElement.classList.contains("dark"),
           color: themeColor(),
@@ -85,39 +73,30 @@ describe("the app.html script and Theme", () => {
 });
 
 describe("Theme", () => {
-  it("keeps a pick in this browser's cookie", () => {
+  it("keeps a pick in this browser", () => {
     deviceIsDark(false);
-    const theme = new Theme("system");
+    const theme = new Theme();
+    expect(theme.choice).toBe("system");
     theme.pick("dark");
     expect(theme.dark).toBe(true);
-    expect(document.cookie).toContain(`${THEME_COOKIE}=dark`);
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
+    expect(new Theme().choice).toBe("dark");
   });
 
-  it("follows a pick made in another tab", async () => {
+  it("follows a pick made in another tab", () => {
     deviceIsDark(true);
-    const here = new Theme("system");
-    const there = new Theme("system");
-    const stopHere = here.followOtherTabs();
-    const stopThere = there.followOtherTabs();
-    try {
-      there.pick("light");
-      await vi.waitFor(() => {
-        expect(here.dark).toBe(false);
-      });
-      there.pick("system");
-      await vi.waitFor(() => {
-        expect(here.choice).toBe("system");
-      });
-      expect(here.dark).toBe(true);
-    } finally {
-      stopHere();
-      stopThere();
-    }
-  });
-
-  it("reads anything unknown as System", () => {
-    expect(parseThemeChoice(undefined)).toBe("system");
-    expect(parseThemeChoice("sepia")).toBe("system");
-    expect(parseThemeChoice("dark")).toBe("dark");
+    const theme = new Theme();
+    const changed = (key: string, newValue: string | null) => {
+      theme.followOtherTabs(new StorageEvent("storage", { key, newValue }));
+    };
+    changed(THEME_STORAGE_KEY, "light");
+    expect(theme.dark).toBe(false);
+    // Another key is someone else's business.
+    changed("other", "dark");
+    expect(theme.choice).toBe("light");
+    // Cleared storage means System again.
+    changed(THEME_STORAGE_KEY, null);
+    expect(theme.choice).toBe("system");
+    expect(theme.dark).toBe(true);
   });
 });

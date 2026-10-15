@@ -7,11 +7,6 @@ interface Options {
    */
   newIds?: readonly string[];
   /**
-   * A question asked before sending (the browser's own dialog); "Cancel"
-   * sends nothing. Gets the form's fields, for questions that name a row.
-   */
-  confirm?: (formData: FormData) => string;
-  /**
    * What the action applies to when that isn't in the form (the group in the
    * URL, say). Part of the input, so an ID kept for one group is never
    * resent for another when the page is reused for a different group.
@@ -44,8 +39,9 @@ export class ActionForm {
 
   // An arrow function, so `this` still works when `use:enhance` calls it.
   submit: SubmitFunction = ({ formData, cancel }) => {
-    const question = this.#options.confirm?.(formData);
-    if (this.saving || (question !== undefined && !confirm(question))) {
+    // Questions ("Leave this group?") are asked before submitting, in a
+    // ConfirmDialog; by the time the form submits, the answer was yes.
+    if (this.saving) {
       cancel();
       return;
     }

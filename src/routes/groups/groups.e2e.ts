@@ -111,9 +111,16 @@ test("a second account joins by link, a third by code", async ({ browser }) => {
   // The owner sees everyone and removes Alex from the row's menu.
   await owner.goto(`/groups/${groupId}/members`);
   await expect(membersList(owner)).toHaveCount(3);
-  owner.once("dialog", (dialog) => void dialog.accept());
   await owner.getByRole("button", { name: "More for Alex" }).click();
   await owner.getByRole("menuitem", { name: "Remove from group" }).click();
+  // It asks first, in the app's own dialog; Cancel changes nothing.
+  const ask = owner.getByRole("alertdialog", { name: "Remove Alex?" });
+  await ask.getByRole("button", { name: "Cancel" }).click();
+  await expect(ask).toBeHidden();
+  await expect(membersList(owner)).toHaveCount(3);
+  await owner.getByRole("button", { name: "More for Alex" }).click();
+  await owner.getByRole("menuitem", { name: "Remove from group" }).click();
+  await ask.getByRole("button", { name: "Remove" }).click();
   await expect(membersList(owner)).toHaveCount(2);
 
   // Alex can no longer see the group.
@@ -165,21 +172,23 @@ test("leaving hands ownership on; the owner can reset the invite", async ({
   await friend.getByRole("button", { name: "Join group" }).click();
   await expect(friend).toHaveURL(`/groups/${groupId}`);
 
-  // Group pages don't update live: the confirm names the next owner from
+  // Group pages don't update live: the dialog names the next owner from
   // the page's data. (The server decides under the group's lock either way.)
   await owner.goto(`/groups/${groupId}/settings`);
-  owner.once("dialog", (dialog) => {
-    expect(dialog.message()).toContain("Second will become the owner");
-    void dialog.accept();
-  });
   await owner.getByRole("button", { name: "Leave group" }).click();
+  const leaving = owner.getByRole("alertdialog", { name: "Leave Handoff?" });
+  await expect(leaving).toContainText("Second will become the owner");
+  await leaving.getByRole("button", { name: "Leave group" }).click();
   await expect(owner).toHaveURL("/");
   await expect(owner.getByText("You're not in a group yet.")).toBeVisible();
 
   await friend.goto(`/groups/${groupId}/members`);
   await expect(membersList(friend)).toHaveText([/Second\s+\(you\)\s+Owner/]);
-  friend.once("dialog", (dialog) => void dialog.accept());
   await friend.getByRole("button", { name: "Reset invite" }).click();
+  await friend
+    .getByRole("alertdialog", { name: "Reset the invite?" })
+    .getByRole("button", { name: "Reset invite" })
+    .click();
   await expect(friend.getByLabel("Invite code")).not.toHaveText(code);
 
   // The old code is dead: a link shows the same message as a wrong code,
@@ -199,11 +208,11 @@ test("leaving hands ownership on; the owner can reset the invite", async ({
   await expect(owner).toHaveURL("/join");
   await expect(input).toHaveValue(code);
 
-  // A character no code uses gets in, and is explained without a lookup.
+  // A character no code uses gets in, and gets the same answer.
   await input.fill("k7qm21");
   await expect(input).toHaveValue("K7QM21");
   await expect(owner.getByRole("alert")).toHaveText(
-    "Invite codes don't use 0, O, 1, I, or L. Check the code you were sent."
+    "That's not an active invite code."
   );
   await expect(owner).toHaveURL("/join");
 });

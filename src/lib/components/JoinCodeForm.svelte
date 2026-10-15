@@ -4,10 +4,7 @@
   import CodeInput from "#lib/components/CodeInput.svelte";
   import { Button } from "#lib/components/ui/button/index.ts";
   import * as Field from "#lib/components/ui/field/index.ts";
-  import {
-    INVITE_CODE_ALPHABET,
-    INVITE_CODE_LENGTH,
-  } from "#lib/group-fields.ts";
+  import { INVITE_CODE_LENGTH } from "#lib/group-fields.ts";
 
   interface Props {
     /** The page's `findInvite` answer, or a dead link's message. */
@@ -23,15 +20,9 @@
   let finding = $state(false);
   // Any letter or digit lands in a box, in either case (the binding below
   // uppercases it). Codes leave out 0, O, 1, I, and L, but refusing those
-  // keys silently feels broken, so they're let in and explained instead.
+  // keys silently feels broken, so they're let in and the server answers
+  // with its usual "not an active invite code".
   const codeCharacters = "^[A-Za-z0-9]+$";
-  const notInCodes = new RegExp(`[^${INVITE_CODE_ALPHABET}]`);
-  let misread = $derived(notInCodes.test(code));
-  let message = $derived(
-    misread
-      ? "Invite codes don't use 0, O, 1, I, or L. Check the code you were sent."
-      : error
-  );
 
   // A pasted "k7q-m2x" becomes "K7QM2X" before it's cut to six characters.
   function cleanPaste(text: string) {
@@ -43,12 +34,7 @@
 <form
   method="POST"
   action="?/find"
-  use:enhance={({ cancel }) => {
-    // No code has these characters: say so here instead of asking the server.
-    if (misread) {
-      cancel();
-      return;
-    }
+  use:enhance={() => {
     finding = true;
     return async ({ update }) => {
       try {
@@ -61,7 +47,7 @@
   }}
 >
   <Field.Group>
-    <Field.Field data-invalid={message !== undefined}>
+    <Field.Field data-invalid={error !== undefined}>
       <Field.Label for="{id}-code">Invite code</Field.Label>
       <CodeInput
         inputId="{id}-code"
@@ -74,12 +60,12 @@
         autocapitalize="characters"
         enterkeyhint="go"
         required
-        invalid={message !== undefined}
-        aria-describedby={message === undefined ? undefined : `${id}-error`}
+        invalid={error !== undefined}
+        aria-describedby={error === undefined ? undefined : `${id}-error`}
         bind:value={() => code, (typed: string) => (code = typed.toUpperCase())}
       />
-      {#if message}
-        <Field.Error id="{id}-error">{message}</Field.Error>
+      {#if error}
+        <Field.Error id="{id}-error">{error}</Field.Error>
       {/if}
     </Field.Field>
     <Button type="submit" size="lg" disabled={finding}>

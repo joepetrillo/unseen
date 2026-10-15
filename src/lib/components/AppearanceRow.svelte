@@ -40,18 +40,23 @@
          their own line instead of squeezing it to "Same as…". -->
     <Item.Content class="min-w-32">
       <Item.Title id="{id}-label">Appearance</Item.Title>
-      <Item.Description>{described[theme.choice]}</Item.Description>
+      <!-- Until the app loads, nobody knows the pick (it's only in this
+           browser), so the line holds its place unseen instead of guessing. -->
+      <Item.Description class={[theme.choice === null && "invisible"]}>
+        {described[theme.choice ?? "system"]}
+      </Item.Description>
     </Item.Content>
     <Item.Actions>
-      <!-- A function binding: reads the theme, and writes only real picks.
-           Tapping the selected button again would otherwise clear it. -->
+      <!-- A function binding: reads the theme (nothing selected until the
+           app loads), and writes only real picks. Tapping the selected button
+           again would otherwise clear it. -->
       <ToggleGroup.Root
         type="single"
         variant="outline"
         size="lg"
         aria-labelledby="{id}-label"
         bind:value={
-          () => theme.choice,
+          () => theme.choice ?? "",
           (value) => {
             const choice = themeChoiceSchema.safeParse(value);
             if (choice.success) theme.pick(choice.data);
