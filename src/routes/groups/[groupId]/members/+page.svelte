@@ -5,6 +5,7 @@
   import { HugeiconsIcon } from "@hugeicons/svelte";
 
   import { ActionForm } from "#lib/action-form.svelte.ts";
+  import ConfirmDialog from "#lib/components/ConfirmDialog.svelte";
   import ListGroup from "#lib/components/ListGroup.svelte";
   import Page from "#lib/components/Page.svelte";
   import { Badge } from "#lib/components/ui/badge/index.ts";
@@ -20,15 +21,12 @@
   let group = $derived(data.group);
   let isOwner = $derived(group.me.role === "owner");
 
-  const remove = new ActionForm({
-    scope: () => group.id,
-    confirm: (formData) => {
-      const member = group.members.find(
-        (m) => m.userId === formData.get("memberId")
-      );
-      return `Remove ${member?.nickname ?? "this person"} from ${group.name}? They can rejoin with the invite.`;
-    },
-  });
+  const remove = new ActionForm({ scope: () => group.id });
+  let removeForm = $state<HTMLFormElement>();
+  // Who the row's menu asked to remove. Kept after the dialog closes, so its
+  // words don't change while it fades out; `confirmingRemove` opens it.
+  let removing = $state<{ userId: string; nickname: string } | null>(null);
+  let confirmingRemove = $state(false);
 </script>
 
 <svelte:head><title>Members · {group.name} · Vunu</title></svelte:head>
@@ -58,16 +56,6 @@
             </Item.Content>
             {#if isOwner && member.userId !== group.me.userId}
               <Item.Actions class="-my-2 -mr-2">
-                <!-- The menu is drawn elsewhere in the page (a portal), so
-                     its item submits this form through the `form` attribute. -->
-                <form
-                  id={`remove-${member.userId}`}
-                  method="POST"
-                  action="?/removeMember"
-                  use:enhance={remove.submit}
-                >
-                  <input type="hidden" name="memberId" value={member.userId} />
-                </form>
                 <DropdownMenu.Root>
                   <DropdownMenu.Trigger>
                     {#snippet child({ props })}
@@ -83,19 +71,15 @@
                   </DropdownMenu.Trigger>
                   <DropdownMenu.Content align="end" class="w-auto">
                     <DropdownMenu.Item
-                      class="w-full text-base"
+                      class="text-base"
                       variant="destructive"
                       disabled={remove.saving}
+                      onSelect={() => {
+                        removing = member;
+                        confirmingRemove = true;
+                      }}
                     >
-                      {#snippet child({ props })}
-                        <button
-                          {...props}
-                          type="submit"
-                          form={`remove-${member.userId}`}
-                        >
-                          Remove from group
-                        </button>
-                      {/snippet}
+                      Remove from group
                     </DropdownMenu.Item>
                   </DropdownMenu.Content>
                 </DropdownMenu.Root>
@@ -105,6 +89,24 @@
         </li>
       {/each}
     </ListGroup>
+    <!-- One form for every row: the dialog's confirm submits it for the
+         member the menu picked. -->
+    <form
+      bind:this={removeForm}
+      method="POST"
+      action="?/removeMember"
+      use:enhance={remove.submit}
+    >
+      <input type="hidden" name="memberId" value={removing?.userId ?? ""} />
+    </form>
+    <ConfirmDialog
+      bind:open={confirmingRemove}
+      title={`Remove ${removing?.nickname ?? "this person"}?`}
+      description={`They'll leave ${group.name}, and can rejoin with the invite.`}
+      confirmLabel="Remove"
+      destructive
+      onconfirm={() => removeForm?.requestSubmit()}
+    />
     {#if remove.error}
       <p class="mt-3 text-sm text-destructive" role="alert">{remove.error}</p>
     {/if}

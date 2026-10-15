@@ -3,6 +3,7 @@
   import { resolve } from "$app/paths";
 
   import { ActionForm } from "#lib/action-form.svelte.ts";
+  import ConfirmDialog from "#lib/components/ConfirmDialog.svelte";
   import Page from "#lib/components/Page.svelte";
   import { Button } from "#lib/components/ui/button/index.ts";
   import * as Field from "#lib/components/ui/field/index.ts";
@@ -25,19 +26,20 @@
   const scope = () => group.id;
   const nickname = new ActionForm({ scope });
   const rename = new ActionForm({ scope });
-  const leave = new ActionForm({
-    scope,
-    confirm: () =>
-      nextOwner === undefined
-        ? `Leave ${group.name}? You're the last one in it, so the group will be deleted.`
-        : isOwner
-          ? `Leave ${group.name}? ${nextOwner.nickname} will become the owner.`
-          : `Leave ${group.name}?`,
-  });
-  const deletion = new ActionForm({
-    scope,
-    confirm: () => `Delete ${group.name} for everyone? This can't be undone.`,
-  });
+  const leave = new ActionForm({ scope });
+  const deletion = new ActionForm({ scope });
+  // Each button asks first; its dialog's confirm submits the form.
+  let leaveForm = $state<HTMLFormElement>();
+  let deleteForm = $state<HTMLFormElement>();
+  let confirmingLeave = $state(false);
+  let confirmingDelete = $state(false);
+  let leaveConsequence = $derived(
+    nextOwner === undefined
+      ? "You're the last one in it, so the group will be deleted."
+      : isOwner
+        ? `${nextOwner.nickname} will become the owner. You can rejoin later with an invite.`
+        : "You can rejoin later with an invite."
+  );
 </script>
 
 <svelte:head><title>Settings · {group.name} · Vunu</title></svelte:head>
@@ -117,23 +119,53 @@
       {/if}
     </p>
     <div class="flex flex-wrap gap-3">
-      <form method="POST" action="?/leave" use:enhance={leave.submit}>
-        <Button type="submit" variant="outline" disabled={leave.saving}>
+      <form
+        bind:this={leaveForm}
+        method="POST"
+        action="?/leave"
+        use:enhance={leave.submit}
+      >
+        <Button
+          variant="outline"
+          disabled={leave.saving}
+          onclick={() => (confirmingLeave = true)}
+        >
           {leave.saving ? "Leaving…" : "Leave group"}
         </Button>
       </form>
       {#if isOwner}
-        <form method="POST" action="?/delete" use:enhance={deletion.submit}>
+        <form
+          bind:this={deleteForm}
+          method="POST"
+          action="?/delete"
+          use:enhance={deletion.submit}
+        >
           <Button
-            type="submit"
             variant="destructive"
             disabled={deletion.saving}
+            onclick={() => (confirmingDelete = true)}
           >
             {deletion.saving ? "Deleting…" : "Delete group"}
           </Button>
         </form>
       {/if}
     </div>
+    <ConfirmDialog
+      bind:open={confirmingLeave}
+      title={`Leave ${group.name}?`}
+      description={leaveConsequence}
+      confirmLabel="Leave group"
+      destructive={nextOwner === undefined}
+      onconfirm={() => leaveForm?.requestSubmit()}
+    />
+    <ConfirmDialog
+      bind:open={confirmingDelete}
+      title={`Delete ${group.name}?`}
+      description="It's removed for everyone, with its matches and watched list. This can't be undone."
+      confirmLabel="Delete group"
+      destructive
+      onconfirm={() => deleteForm?.requestSubmit()}
+    />
     {#if leave.error ?? deletion.error}
       <p class="mt-3 text-sm text-destructive" role="alert">
         {leave.error ?? deletion.error}

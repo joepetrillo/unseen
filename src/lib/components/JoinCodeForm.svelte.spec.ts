@@ -32,19 +32,17 @@ it("keeps letters and digits, uppercased, six at most", async () => {
   expect(submitted).toHaveBeenCalledOnce();
 });
 
-it("explains characters no code uses instead of dropping them", async () => {
+it("lets in characters no code uses and sends them to be checked", async () => {
   await render(JoinCodeForm, {});
   const input = page.getByLabelText("Invite code");
 
   await userEvent.click(input);
   await userEvent.keyboard("k7qm2i");
   await expect.element(input).toHaveValue("K7QM2I");
-  await expect
-    .element(page.getByRole("alert"))
-    .toHaveTextContent(
-      "Invite codes don't use 0, O, 1, I, or L. Check the code you were sent."
-    );
-  await expect.element(input).toHaveAttribute("aria-invalid", "true");
+  // No hint about which characters codes use: the server's answer is the
+  // same "not an active invite code" as any other wrong code.
+  expect(submitted).toHaveBeenCalledOnce();
+  await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
 });
 
 it("cleans up a pasted code", async () => {

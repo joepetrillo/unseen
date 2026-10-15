@@ -67,20 +67,14 @@ describe("ActionForm", () => {
     expect(changed.sent.actionId).not.toBe(second.sent.actionId);
   });
 
-  it("sends nothing while saving or when the question is declined", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
-    const form = new ActionForm({ confirm: () => "Delete it?" });
-    expect(submit(form, {}).cancel).toHaveBeenCalled();
-    expect(confirm).toHaveBeenCalledWith("Delete it?");
-
-    confirm.mockReturnValue(true);
+  it("sends nothing while saving", async () => {
+    const form = new ActionForm();
     const first = submit(form, {});
     expect(first.cancel).not.toHaveBeenCalled();
     expect(form.saving).toBe(true);
     expect(submit(form, {}).cancel).toHaveBeenCalled();
     await first.answer({ type: "success", status: 204, location });
     expect(form.saving).toBe(false);
-    confirm.mockRestore();
   });
 });
 

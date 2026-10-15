@@ -5,6 +5,7 @@
   import { HugeiconsIcon } from "@hugeicons/svelte";
 
   import { ActionForm } from "#lib/action-form.svelte.ts";
+  import ConfirmDialog from "#lib/components/ConfirmDialog.svelte";
   import { Button } from "#lib/components/ui/button/index.ts";
   import * as Card from "#lib/components/ui/card/index.ts";
 
@@ -27,11 +28,9 @@
     resolve(`/groups/[groupId]/members?/resetInvite` as const, { groupId })
   );
 
-  const reset = new ActionForm({
-    scope: () => groupId,
-    confirm: () =>
-      "Make a new invite? The current link and code will stop working.",
-  });
+  const reset = new ActionForm({ scope: () => groupId });
+  let resetForm = $state<HTMLFormElement>();
+  let confirmingReset = $state(false);
 
   // Phones open their share sheet (Messages, WhatsApp, …); browsers without
   // one copy the link instead.
@@ -85,15 +84,29 @@
     </Button>
     {#if isOwner}
       <form
+        bind:this={resetForm}
         class="flex flex-col"
         method="POST"
         action={resetAction}
         use:enhance={reset.submit}
       >
-        <Button type="submit" variant="ghost" disabled={reset.saving}>
+        <!-- Asks first; the dialog's Reset invite submits this form. -->
+        <Button
+          variant="ghost"
+          disabled={reset.saving}
+          onclick={() => (confirmingReset = true)}
+        >
           {reset.saving ? "Resetting…" : "Reset invite"}
         </Button>
       </form>
+      <ConfirmDialog
+        bind:open={confirmingReset}
+        title="Reset the invite?"
+        description="The current link and code will stop working. Anyone who hasn't joined yet will need the new one."
+        confirmLabel="Reset invite"
+        destructive
+        onconfirm={() => resetForm?.requestSubmit()}
+      />
     {/if}
     <!-- Polite: announced after whatever the screen reader is saying. -->
     <p class="text-center text-sm text-balance empty:hidden" aria-live="polite">
