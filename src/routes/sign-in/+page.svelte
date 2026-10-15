@@ -1,8 +1,10 @@
 <script lang="ts">
   import { refreshAll } from "$app/navigation";
+  import { REGEXP_ONLY_DIGITS } from "bits-ui";
   import { tick } from "svelte";
 
   import { authClient } from "#lib/auth-client.ts";
+  import CodeInput from "#lib/components/CodeInput.svelte";
   import Page from "#lib/components/Page.svelte";
   import { Button } from "#lib/components/ui/button/index.ts";
   import * as Field from "#lib/components/ui/field/index.ts";
@@ -156,19 +158,15 @@
       <Field.Group>
         <Field.Field>
           <Field.Label for="code">Code</Field.Label>
-          <!-- one-time-code lets phones offer the code from the email. The
-               pattern is a JS string because Svelte reads {6} in a quoted
-               attribute as an expression, turning it into "[0-9]6". -->
-          <Input
-            id="code"
-            class="h-14 text-center font-mono text-2xl tracking-[0.5em]"
-            type="text"
+          <!-- The input defaults to autocomplete="one-time-code", so phones
+               offer the emailed code above the keyboard. -->
+          <CodeInput
+            inputId="code"
             name="code"
-            inputmode="numeric"
-            autocomplete="one-time-code"
-            enterkeyhint="done"
-            pattern={"[0-9]{6}"}
             maxlength={6}
+            pattern={REGEXP_ONLY_DIGITS}
+            pasteTransformer={(text: string) => text.replace(/\D/g, "")}
+            enterkeyhint="done"
             required
             disabled={pending !== null}
             bind:value={code}

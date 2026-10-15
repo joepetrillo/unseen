@@ -1,9 +1,9 @@
 <script lang="ts">
   import { enhance } from "$app/forms";
 
+  import CodeInput from "#lib/components/CodeInput.svelte";
   import { Button } from "#lib/components/ui/button/index.ts";
   import * as Field from "#lib/components/ui/field/index.ts";
-  import { Input } from "#lib/components/ui/input/index.ts";
   import {
     INVITE_CODE_ALPHABET,
     INVITE_CODE_LENGTH,
@@ -22,21 +22,13 @@
   let code = $state("");
   let finding = $state(false);
   const notInCode = new RegExp(`[^${INVITE_CODE_ALPHABET}]`, "g");
+  // Code characters in either case: typed lowercase is accepted, then
+  // uppercased by the binding below. Anything else never lands in a box.
+  const codeCharacters = `^[${INVITE_CODE_ALPHABET}${INVITE_CODE_ALPHABET.toLowerCase()}]+$`;
 
-  // Rewrites what was typed or pasted into something that could be a code:
-  // uppercase, only the code's characters ("k7q-m2x" becomes "K7QM2X"), and
-  // no more than six. Not `maxlength`: it would cut a pasted "K7Q-M2X" at
-  // the dash before the dash is removed.
-  function keepCodeCharacters(
-    event: Event & { currentTarget: HTMLInputElement }
-  ) {
-    code = event.currentTarget.value
-      .toUpperCase()
-      .replace(notInCode, "")
-      .slice(0, INVITE_CODE_LENGTH);
-    // Svelte only updates the DOM when `code` changes; a rejected character
-    // leaves `code` as it was, so put the cleaned value back by hand.
-    event.currentTarget.value = code;
+  // A pasted "k7q-m2x" becomes "K7QM2X" before it's cut to six characters.
+  function cleanPaste(text: string) {
+    return text.toUpperCase().replace(notInCode, "");
   }
 </script>
 
@@ -59,20 +51,20 @@
   <Field.Group>
     <Field.Field data-invalid={error !== undefined}>
       <Field.Label for="{id}-code">Invite code</Field.Label>
-      <Input
-        id="{id}-code"
-        class="h-14 text-center font-mono text-2xl tracking-[0.3em] uppercase"
+      <CodeInput
+        inputId="{id}-code"
         name="code"
-        value={code}
-        oninput={keepCodeCharacters}
-        required
-        minlength={INVITE_CODE_LENGTH}
+        maxlength={INVITE_CODE_LENGTH}
+        pattern={codeCharacters}
+        pasteTransformer={cleanPaste}
+        inputmode="text"
         autocomplete="off"
         autocapitalize="characters"
-        spellcheck="false"
         enterkeyhint="go"
-        aria-invalid={error !== undefined}
+        required
+        invalid={error !== undefined}
         aria-describedby={error === undefined ? undefined : `${id}-error`}
+        bind:value={() => code, (typed: string) => (code = typed.toUpperCase())}
       />
       {#if error}
         <Field.Error id="{id}-error">{error}</Field.Error>

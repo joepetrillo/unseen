@@ -94,15 +94,13 @@ test("a second account joins by link, a third by code", async ({ browser }) => {
     /Sam\s+\(you\)/,
   ]);
 
-  // By code, typed loosely on the Join a group screen.
+  // By code, typed loosely on the Join a group screen: lowercase is
+  // uppercased, the space never lands, and the sixth character submits.
   const third = await newPerson(browser);
   await third.getByRole("link", { name: "Join a group" }).click();
   await third
     .getByLabel("Invite code")
-    .fill(`${code.slice(0, 3).toLowerCase()} ${code.slice(3)}`);
-  // Lowercase and the space are cleaned up as it's typed.
-  await expect(third.getByLabel("Invite code")).toHaveValue(code);
-  await third.getByRole("button", { name: "Continue" }).click();
+    .pressSequentially(`${code.slice(0, 3).toLowerCase()} ${code.slice(3)}`);
   await expect(third).toHaveURL(`/join/${code}`);
   // The nickname field remembers nothing yet for a new account.
   await third.getByLabel("What should this group call you?").fill("Alex");
@@ -195,7 +193,6 @@ test("leaving hands ownership on; the owner can reset the invite", async ({
   await owner.goto("/join");
   const input = owner.getByLabel("Invite code");
   await input.fill(code);
-  await owner.getByRole("button", { name: "Continue" }).click();
   await expect(owner.getByRole("alert")).toHaveText(
     "That's not an active invite code."
   );
@@ -216,7 +213,6 @@ test("an invite link survives signing in first", async ({ browser }) => {
   await newcomer.getByRole("button", { name: "Email me a code" }).click();
   await expect(newcomer.getByText("We sent a 6-digit code")).toBeVisible();
   await newcomer.getByLabel("Code").fill(await readSignInCode(db, email));
-  await newcomer.getByRole("button", { name: "Sign in" }).click();
 
   await expect(newcomer).toHaveURL(`/join/${code}`);
   await newcomer.getByLabel("What should this group call you?").fill("New");

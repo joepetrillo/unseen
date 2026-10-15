@@ -8,6 +8,7 @@
   import { HugeiconsIcon } from "@hugeicons/svelte";
 
   import { authClient } from "#lib/auth-client.ts";
+  import AppearanceRow from "#lib/components/AppearanceRow.svelte";
   import ListGroup from "#lib/components/ListGroup.svelte";
   import NavRow from "#lib/components/NavRow.svelte";
   import Page from "#lib/components/Page.svelte";
@@ -109,6 +110,7 @@
           <HugeiconsIcon icon={Film01Icon} class="size-5" />
         {/snippet}
       </NavRow>
+      <AppearanceRow />
       {#if data.user}
         <li>
           <Item.Root class="rounded-none">

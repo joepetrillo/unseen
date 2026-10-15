@@ -153,8 +153,8 @@ test("signs in with an emailed code and returns to the requested page", async ({
   await expect(page.getByRole("status")).toHaveText(/Sent/);
   expect(await readSignInCode(db, email)).toBe(code);
 
+  // Filling the last box signs in.
   await page.getByLabel("Code").fill(code);
-  await page.getByRole("button", { name: "Sign in" }).click();
 
   await expect(page).toHaveURL("/seen");
 

@@ -9,17 +9,29 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
     />
-    <!-- Status bar color, matching --background in each appearance. -->
-    <meta
-      name="theme-color"
-      media="(prefers-color-scheme: light)"
-      content="#ffffff"
-    />
-    <meta
-      name="theme-color"
-      media="(prefers-color-scheme: dark)"
-      content="#0a0a0a"
-    />
+    <!-- Status bar color, matching --background. The script sets it. -->
+    <meta name="theme-color" content="#ffffff" />
+    <!-- Runs before the page draws, so it never shows the wrong theme first.
+         Plain JavaScript repeating applyTheme in src/lib/theme.svelte.ts;
+         theme.svelte.spec.ts checks they agree. -->
+    <script>
+      (function () {
+        var choice = null;
+        try {
+          choice = localStorage.getItem("theme");
+        } catch (error) {
+          // Storage blocked: follow the device.
+        }
+        var dark =
+          choice === "dark" ||
+          (choice !== "light" &&
+            matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.classList.toggle("dark", dark);
+        document.querySelector('meta[name="theme-color"]').content = dark
+          ? "#0a0a0a"
+          : "#ffffff";
+      })();
+    </script>
     <meta name="text-scale" content="scale" />
     %sveltekit.head%
   </head>
