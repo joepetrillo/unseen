@@ -25,14 +25,6 @@ const writePaths = [
       "Change groups only through #lib/server/groups.ts (it locks the group and logs the action).",
   },
   {
-    // No owner: retired in stage 8, the tables wait to be dropped.
-    owner: null,
-    selector:
-      "CallExpression[callee.property.name=/^(insert|update|delete)$/][arguments.0.name=/^(watchSessions|watchSessionParticipants|watchSessionAnswers|groupPastMatches)$/]",
-    message:
-      "Watch sessions are retired (stage 8): nothing writes their tables until a later migration drops them.",
-  },
-  {
     owner: "src/lib/server/group-deck.ts",
     selector:
       "CallExpression[callee.property.name=/^(insert|update|delete)$/][arguments.0.name=/^(notSeenMovies|groupWatchedMovies)$/]",

@@ -6,7 +6,7 @@ Live domain: [vunu.app](https://vunu.app). `www.vunu.app` redirects there. Repos
 
 SvelteKit 3.0.1 stable, Svelte 5, TypeScript, Drizzle 1.0.0-rc.4, Neon Postgres through `pg`, Better Auth, Resend, and Vercel's Node adapter 7.0.0. The audit fixes, stable framework upgrade, and Vunu rebrand are implemented. The [audit](docs/AUDIT.md) records historical versions, source references, verification, and rollout notes; `bun.lock` records current resolved versions. [AGENTS.md](AGENTS.md) holds contributor conventions.
 
-Stages 1–7 are done; stage 8 (the group deck, which replaced watch sessions) is built and waiting to merge. Status: [Current state](docs/PROJECT_SPEC.md#current-state).
+Stages 1–8 are done; stage 8 (the group deck) replaced watch sessions. Status: [Current state](docs/PROJECT_SPEC.md#current-state).
 
 ## Development setup
 
