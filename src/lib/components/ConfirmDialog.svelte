@@ -30,8 +30,11 @@
 <AlertDialog.Root bind:open>
   <AlertDialog.Content>
     <AlertDialog.Header>
+      <!-- Group and member names can be one long word: let them break. -->
       <AlertDialog.Title class="wrap-anywhere">{title}</AlertDialog.Title>
-      <AlertDialog.Description>{description}</AlertDialog.Description>
+      <AlertDialog.Description class="wrap-anywhere">
+        {description}
+      </AlertDialog.Description>
     </AlertDialog.Header>
     <AlertDialog.Footer>
       <AlertDialog.Cancel size="lg">Cancel</AlertDialog.Cancel>
