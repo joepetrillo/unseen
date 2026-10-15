@@ -88,30 +88,32 @@ test("a second account joins by link, a third by code", async ({ browser }) => {
   await friend.getByLabel("What should this group call you?").fill("Sam");
   await friend.getByRole("button", { name: "Join group" }).click();
   await expect(friend).toHaveURL(`/groups/${groupId}`);
+  await friend.getByRole("link", { name: /^Members/ }).click();
   await expect(membersList(friend)).toHaveText([
     /Joe\s+Owner/,
     /Sam\s+\(you\)/,
   ]);
 
-  // By code, typed loosely on the home page.
+  // By code, typed loosely on the Join a group screen: lowercase is
+  // uppercased, the space never lands, and the sixth character submits.
   const third = await newPerson(browser);
+  await third.getByRole("link", { name: "Join a group" }).click();
   await third
-    .getByLabel("Join with a code")
-    .fill(`${code.slice(0, 3).toLowerCase()} ${code.slice(3)}`);
-  // Lowercase and the space are cleaned up as it's typed.
-  await expect(third.getByLabel("Join with a code")).toHaveValue(code);
-  await third.getByRole("button", { name: "Join", exact: true }).click();
+    .getByLabel("Invite code")
+    .pressSequentially(`${code.slice(0, 3).toLowerCase()} ${code.slice(3)}`);
   await expect(third).toHaveURL(`/join/${code}`);
   // The nickname field remembers nothing yet for a new account.
   await third.getByLabel("What should this group call you?").fill("Alex");
   await third.getByRole("button", { name: "Join group" }).click();
+  await third.getByRole("link", { name: /^Members/ }).click();
   await expect(membersList(third)).toHaveCount(3);
 
-  // The owner sees everyone after a reload and removes Alex.
-  await owner.reload();
+  // The owner sees everyone and removes Alex from the row's menu.
+  await owner.goto(`/groups/${groupId}/members`);
   await expect(membersList(owner)).toHaveCount(3);
   owner.once("dialog", (dialog) => void dialog.accept());
-  await owner.getByRole("button", { name: "Remove Alex" }).click();
+  await owner.getByRole("button", { name: "More for Alex" }).click();
+  await owner.getByRole("menuitem", { name: "Remove from group" }).click();
   await expect(membersList(owner)).toHaveCount(2);
 
   // Alex can no longer see the group.
@@ -130,15 +132,23 @@ test("a non-member gets the same 404 as for a missing group", async ({
   const missing = await stranger.goto(`/groups/${crypto.randomUUID()}`);
   expect(theirs?.status()).toBe(404);
   expect(missing?.status()).toBe(404);
+  // Every screen under the group answers the same way.
+  for (const screen of ["matches", "watched", "members", "settings", "find"]) {
+    const response = await stranger.goto(`/groups/${groupId}/${screen}`);
+    expect(response?.status()).toBe(404);
+  }
 
   // Posting a change directly is refused too, and changes nothing.
-  const rename = await stranger.request.post(`/groups/${groupId}?/rename`, {
-    form: { actionId: crypto.randomUUID(), name: "Taken over" },
-    headers: {
-      accept: "application/json",
-      origin: new URL(stranger.url()).origin,
-    },
-  });
+  const rename = await stranger.request.post(
+    `/groups/${groupId}/settings?/rename`,
+    {
+      form: { actionId: crypto.randomUUID(), name: "Taken over" },
+      headers: {
+        accept: "application/json",
+        origin: new URL(stranger.url()).origin,
+      },
+    }
+  );
   expect(rename.status()).toBe(404);
   await owner.reload();
   await expect(owner.getByRole("heading", { level: 1 })).toHaveText("Private");
@@ -157,7 +167,7 @@ test("leaving hands ownership on; the owner can reset the invite", async ({
 
   // Group pages don't update live: the confirm names the next owner from
   // the page's data. (The server decides under the group's lock either way.)
-  await owner.reload();
+  await owner.goto(`/groups/${groupId}/settings`);
   owner.once("dialog", (dialog) => {
     expect(dialog.message()).toContain("Second will become the owner");
     void dialog.accept();
@@ -166,7 +176,7 @@ test("leaving hands ownership on; the owner can reset the invite", async ({
   await expect(owner).toHaveURL("/");
   await expect(owner.getByText("You're not in a group yet.")).toBeVisible();
 
-  await friend.reload();
+  await friend.goto(`/groups/${groupId}/members`);
   await expect(membersList(friend)).toHaveText([/Second\s+\(you\)\s+Owner/]);
   friend.once("dialog", (dialog) => void dialog.accept());
   await friend.getByRole("button", { name: "Reset invite" }).click();
@@ -179,15 +189,14 @@ test("leaving hands ownership on; the owner can reset the invite", async ({
     "That's not an active invite code."
   );
 
-  // Typed on the home page, it stays there with the same message.
-  await owner.goto("/");
-  const input = owner.getByLabel("Join with a code");
+  // Typed on the Join a group screen, it stays there with the same message.
+  await owner.goto("/join");
+  const input = owner.getByLabel("Invite code");
   await input.fill(code);
-  await owner.getByRole("button", { name: "Join", exact: true }).click();
   await expect(owner.getByRole("alert")).toHaveText(
     "That's not an active invite code."
   );
-  await expect(owner).toHaveURL("/");
+  await expect(owner).toHaveURL("/join");
   await expect(input).toHaveValue(code);
 });
 
@@ -204,7 +213,6 @@ test("an invite link survives signing in first", async ({ browser }) => {
   await newcomer.getByRole("button", { name: "Email me a code" }).click();
   await expect(newcomer.getByText("We sent a 6-digit code")).toBeVisible();
   await newcomer.getByLabel("Code").fill(await readSignInCode(db, email));
-  await newcomer.getByRole("button", { name: "Sign in" }).click();
 
   await expect(newcomer).toHaveURL(`/join/${code}`);
   await newcomer.getByLabel("What should this group call you?").fill("New");

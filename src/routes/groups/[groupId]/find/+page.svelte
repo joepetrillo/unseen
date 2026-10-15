@@ -1,148 +1,285 @@
 <script lang="ts">
-  import { enhance } from "$app/forms";
+  import { beforeNavigate, goto, refreshAll } from "$app/navigation";
   import { resolve } from "$app/paths";
+  import type { ResolvedPathname } from "$app/types";
+  import ArrowLeft01Icon from "@hugeicons/core-free-icons/ArrowLeft01Icon";
+  import Undo02Icon from "@hugeicons/core-free-icons/Undo02Icon";
+  import { HugeiconsIcon } from "@hugeicons/svelte";
+  import { prefersReducedMotion } from "svelte/motion";
+  import { fly } from "svelte/transition";
 
-  import { ActionForm } from "#lib/action-form.svelte.ts";
-  import FilterFields, { CHIP } from "#lib/components/FilterFields.svelte";
-  import Page from "#lib/components/Page.svelte";
+  import MoviePoster from "#lib/components/MoviePoster.svelte";
+  import { Badge } from "#lib/components/ui/badge/index.ts";
   import { Button } from "#lib/components/ui/button/index.ts";
   import * as Card from "#lib/components/ui/card/index.ts";
-  import * as Field from "#lib/components/ui/field/index.ts";
-  import { NO_FILTERS } from "#lib/watch-fields.ts";
+  import { Spinner } from "#lib/components/ui/spinner/index.ts";
+  import {
+    describeMovie,
+    hasPreferences,
+    preferencesToQuery,
+    REVIEW_PROMPT_AT,
+  } from "#lib/deck-fields.ts";
+  import { formatCount, listNames } from "#lib/format.ts";
 
   import type { PageProps } from "./$types";
+  import { Deck } from "./deck.svelte.ts";
 
   let { data }: PageProps = $props();
 
-  // Starting over keeps the current session's people ticked.
-  let invitedUserIds = $derived([...data.invited]);
-  // The browser names the new session, so a retried start lands on it.
-  const start = new ActionForm({
-    newIds: ["watchSessionId"],
-    scope: () => data.group.id,
+  // Tonight's preferences, as this page's URL query has them.
+  let query = $derived(preferencesToQuery(data.preferences));
+
+  // A new Deck whenever the page data changes (new preferences, another
+  // group); otherwise it lives as long as the page.
+  let deck = $derived(new Deck(data.deck, query));
+
+  // Follow other people's answers while the deck is on screen. An effect is
+  // the right tool here: polling is an outside process that must start with
+  // the deck and stop when it goes (like useEffect's cleanup in React, or
+  // ngOnDestroy). If you leave the group meanwhile, reload (into a 404).
+  let pollUrl = $derived(
+    resolve("/groups/[groupId]/find/poll", { groupId: data.group.id })
+  );
+  $effect(() => deck.connect(pollUrl, () => void refreshAll()));
+
+  // Links keep tonight's preferences: the group page lists the matches
+  // that fit them first. `resolve` checks route IDs, query included.
+  let groupId = $derived({ groupId: data.group.id });
+  let groupHref = $derived(resolve("/groups/[groupId]", groupId));
+  let matchesHref = $derived(
+    query === ""
+      ? resolve("/groups/[groupId]/matches", groupId)
+      : resolve(`/groups/[groupId]/matches?${query}` as const, groupId)
+  );
+  let preferencesHref = $derived(
+    query === ""
+      ? resolve("/groups/[groupId]/find/preferences", groupId)
+      : resolve(`/groups/[groupId]/find/preferences?${query}` as const, groupId)
+  );
+
+  // Leaving the page drops answers still waiting to be sent, so any link
+  // (back, Matches, preferences) waits for them first. A failed save
+  // keeps you here with Retry. Closing the tab gets the browser's own
+  // "Leave this page?" question instead.
+  beforeNavigate((navigation) => {
+    const target = navigation.to?.url;
+    if (deck.pending === 0 || target === undefined) return;
+    navigation.cancel();
+    if (navigation.willUnload) return;
+    // The navigation Kit just resolved and we cancelled: same origin (an
+    // unload would have returned above), so its path is already resolved.
+    const href =
+      `${target.pathname}${target.search}${target.hash}` as ResolvedPathname;
+    const saving = deck;
+    void saving.settle().then((saved) => {
+      // refreshAll: Kit preloaded the link's data when it was touched,
+      // before these saves landed; that copy would show stale matches.
+      if (saved) void goto(href, { refreshAll: true });
+    });
   });
+
+  // The leaving card flies toward the side of its answer. Skipped for
+  // people who ask their device for less motion.
+  function leave(node: Element) {
+    return fly(node, {
+      x: deck.lastAnswer === "seen" ? -360 : 360,
+      duration: prefersReducedMotion.current ? 0 : 260,
+    });
+  }
 </script>
 
 <svelte:head><title>Find a movie · Vunu</title></svelte:head>
 
-<Page
-  title="Find a movie"
-  description="One movie at a time: tap Seen or Not seen. Anything nobody has seen becomes a match."
-  back={{
-    href: resolve("/groups/[groupId]", { groupId: data.group.id }),
-    label: data.group.name,
-  }}
+<!-- A full-screen layout (not Page): the card takes whatever height the
+       header and buttons leave. dvh follows Safari's toolbar as it hides.
+       The top padding matches Page's, so the back link doesn't jump. -->
+<!-- No link preloading: matches change with every answer, and data
+       fetched when a link is touched could be stale by the time it opens. -->
+<div
+  data-sveltekit-preload-data="off"
+  class="mx-auto flex h-dvh w-full max-w-md flex-col pt-[max(env(safe-area-inset-top),1.5rem)] pr-[max(env(safe-area-inset-right),1.25rem)] pb-[max(env(safe-area-inset-bottom),1rem)] pl-[max(env(safe-area-inset-left),1.25rem)]"
 >
-  {#if data.active !== null && data.replacing === null}
-    <!-- One active session per group: offer it instead of a second one. -->
-    <Card.Root>
-      <Card.Header>
-        <Card.Title>A session is already going</Card.Title>
-        <Card.Description>
-          {#if data.active.isHost}
-            Pick up where you left off, or start over with new filters.
-          {:else if data.active.isMine}
-            Someone in {data.group.name} started one with you in it. A group runs
-            one session at a time.
-          {:else}
-            Someone in {data.group.name} started one. A group runs one session at
-            a time.
+  <header class="flex items-center justify-between gap-3">
+    <!-- shrink: buttons don't by default, and a long group name would push
+         Matches off the screen. -->
+    <Button
+      href={groupHref}
+      variant="ghost"
+      size="sm"
+      class="-ml-3 min-w-0 shrink"
+    >
+      <HugeiconsIcon icon={ArrowLeft01Icon} data-icon="inline-start" />
+      <span class="truncate">{data.group.name}</span>
+    </Button>
+    <Button href={matchesHref} variant="secondary" size="sm">
+      Matches
+      <Badge class="tabular-nums">{formatCount(deck.matchCount)}</Badge>
+    </Button>
+  </header>
+  <!-- Your preferences for tonight; nobody else sees them. -->
+  <div class="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
+    <span class="truncate">In the mood for: {data.mood}</span>
+    <Button
+      href={preferencesHref}
+      variant="link"
+      size="sm"
+      class="h-auto shrink-0 px-1"
+    >
+      Change
+    </Button>
+  </div>
+
+  <main class="flex min-h-0 flex-1 flex-col items-center justify-center py-4">
+    {#if deck.refused !== null}
+      <div class="text-center text-balance" role="alert">
+        <p class="text-lg font-semibold">{deck.refused}</p>
+        <Button class="mt-4" onclick={() => refreshAll()}>Reload</Button>
+      </div>
+    {:else if deck.reviewPrompt}
+      <Card.Root class="w-full">
+        <Card.Header>
+          <Card.Title>{REVIEW_PROMPT_AT} movies nobody has seen</Card.Title>
+          <Card.Description>
+            Take a look and pick one, or keep going to find more.
+          </Card.Description>
+        </Card.Header>
+        <Card.Footer class="flex flex-col items-stretch gap-3">
+          <Button size="lg" href={matchesHref}>See the matches</Button>
+          <Button variant="ghost" onclick={() => (deck.reviewPrompt = false)}>
+            Keep going
+          </Button>
+        </Card.Footer>
+      </Card.Root>
+    {:else if deck.card !== undefined}
+      <!-- The visible card with the next one behind it, slightly smaller,
+             so its poster is already loaded when it moves up. -->
+      <div class="relative aspect-2/3 h-full max-h-full max-w-full">
+        {#each deck.cards.slice(0, 2).reverse() as card (card.id)}
+          {@const isTop = card.id === deck.card.id}
+          <div
+            class={[
+              "absolute inset-0 transition-[transform,opacity] duration-300 ease-out motion-reduce:transition-none",
+              isTop ? "z-10" : "translate-y-3 scale-[0.94] opacity-60",
+            ]}
+            aria-hidden={!isTop}
+            out:leave
+          >
+            <MoviePoster
+              posterPath={card.posterPath}
+              title={card.title}
+              sizes="(max-width: 640px) 80vw, 420px"
+              loading="eager"
+              class="h-full rounded-3xl shadow-xl"
+            />
+          </div>
+        {/each}
+      </div>
+      <div class="mt-4 w-full text-center text-balance" aria-live="polite">
+        <h1 class="line-clamp-2 text-2xl font-bold tracking-tight">
+          {deck.card.title}
+        </h1>
+        <p class="mt-1 text-muted-foreground">{describeMovie(deck.card)}</p>
+      </div>
+    {:else if !deck.exhausted || deck.waitingOn === null}
+      <div class="flex items-center gap-3 text-muted-foreground">
+        <Spinner />
+        Dealing more movies…
+      </div>
+    {:else if deck.waitingOn.length > 0}
+      <!-- Never suggest other preferences here: the movies exist, they
+             just need other people's answers. -->
+      <div class="text-center text-balance" aria-live="polite">
+        <p class="text-lg font-semibold">You're caught up</p>
+        <p class="mt-2 text-muted-foreground">
+          Waiting for {listNames(deck.waitingOn)} to answer.
+        </p>
+        <div class="mt-6 flex flex-col gap-3">
+          <Button size="lg" href={matchesHref}>See the matches</Button>
+        </div>
+      </div>
+    {:else}
+      <div class="text-center text-balance">
+        <p class="text-lg font-semibold">
+          {hasPreferences(data.preferences)
+            ? "That's every movie that fits your preferences."
+            : "That's every movie for now."}
+        </p>
+        <p class="mt-2 text-muted-foreground">
+          {hasPreferences(data.preferences)
+            ? "Look over the matches, or change your preferences for more."
+            : "Look over the matches."}
+        </p>
+        <div class="mt-6 flex flex-col gap-3">
+          <Button size="lg" href={matchesHref}>See the matches</Button>
+          {#if hasPreferences(data.preferences)}
+            <Button variant="ghost" href={preferencesHref}>
+              Change preferences
+            </Button>
           {/if}
-        </Card.Description>
-      </Card.Header>
-      <Card.Footer class="flex flex-col items-stretch gap-3">
-        {#if data.active.isHost}
-          <Button
-            size="lg"
-            href={resolve("/sessions/[watchSessionId]", {
-              watchSessionId: data.active.id,
-            })}
-          >
-            Continue the session
-          </Button>
-          <Button
-            variant="ghost"
-            href={resolve(`/groups/[groupId]/find?replace=${data.active.id}`, {
-              groupId: data.group.id,
-            })}
-          >
-            Start a new one
-          </Button>
-        {:else if data.active.isMine}
-          <Button
-            size="lg"
-            href={resolve("/sessions/[watchSessionId]", {
-              watchSessionId: data.active.id,
-            })}
-          >
-            Go to the session
-          </Button>
-        {:else}
-          <Button
-            size="lg"
-            href={resolve("/groups/[groupId]", { groupId: data.group.id })}
-          >
-            Back to {data.group.name}
-          </Button>
-        {/if}
-      </Card.Footer>
-    </Card.Root>
-  {:else}
-    <form method="POST" action="?/start" use:enhance={start.submit}>
-      <input type="hidden" name="replace" value={data.replacing?.id ?? ""} />
+        </div>
+      </div>
+    {/if}
+  </main>
 
-      <Field.Group>
-        {#if data.members.length > 0}
-          <Field.Set>
-            <Field.Legend variant="label">Who's watching</Field.Legend>
-            <Field.Description>
-              {data.replacing === null
-                ? "You're in. The others join when they accept."
-                : "People in this session stay in. Anyone new joins when they accept."}
-            </Field.Description>
-            <div class="flex flex-wrap gap-2">
-              {#each data.members as member (member.userId)}
-                <label class={CHIP}>
-                  <input
-                    class="sr-only"
-                    type="checkbox"
-                    name="invitedUserIds"
-                    value={member.userId}
-                    bind:group={invitedUserIds}
-                  />
-                  {member.nickname}
-                </label>
-              {/each}
-            </div>
-          </Field.Set>
-        {/if}
-
-        <FilterFields
-          genres={data.genres}
-          initial={data.replacing?.filters ?? NO_FILTERS}
-        />
-      </Field.Group>
-
-      {#if data.replacing !== null}
-        <p class="mt-6 text-sm text-muted-foreground">
-          Starting ends the current session for everyone. Its matches stay on
-          its page.
-        </p>
-      {/if}
-
+  <footer class="flex flex-col gap-3">
+    <div class="flex min-h-9 items-center justify-between gap-3">
       <Button
-        type="submit"
-        size="lg"
-        class="mt-8 w-full"
-        disabled={start.saving}
+        variant="ghost"
+        size="sm"
+        class="-ml-3"
+        onclick={() => {
+          void deck.undo();
+        }}
+        disabled={!deck.canUndo ||
+          deck.undoing ||
+          deck.error !== null ||
+          deck.refused !== null}
       >
-        {start.saving ? "Starting…" : "Start"}
+        <HugeiconsIcon icon={Undo02Icon} data-icon="inline-start" />
+        Undo
       </Button>
-      {#if start.error}
-        <p class="mt-3 text-sm text-destructive" role="alert">
-          {start.error}
-        </p>
+      <!-- Saving is quiet; only a failure asks for anything. -->
+      <p class="text-sm text-muted-foreground" aria-live="polite">
+        {#if deck.error !== null}
+          <span class="text-destructive">{deck.error}</span>
+        {:else if deck.undoError !== null}
+          <span class="text-destructive">{deck.undoError}</span>
+        {:else if deck.saving}
+          Saving…
+        {:else if deck.offline}
+          Can't reach Vunu. Trying again…
+        {/if}
+      </p>
+      {#if deck.error !== null}
+        <Button
+          variant="outline"
+          size="sm"
+          onclick={() => {
+            deck.retry();
+          }}
+        >
+          Retry
+        </Button>
       {/if}
-    </form>
-  {/if}
-</Page>
+    </div>
+
+    <!-- Two equal buttons: Vunu asks what you've seen, not what you like. -->
+    <div class="grid grid-cols-2 gap-3">
+      {#each [{ answer: "seen", label: "Seen" }, { answer: "not_seen", label: "Not seen" }] as const as choice (choice.answer)}
+        <Button
+          variant="secondary"
+          class="h-16 text-lg"
+          disabled={deck.card === undefined ||
+            deck.undoing ||
+            deck.reviewPrompt ||
+            deck.refused !== null}
+          onclick={() => {
+            deck.answer(choice.answer);
+          }}
+        >
+          {choice.label}
+        </Button>
+      {/each}
+    </div>
+  </footer>
+</div>

@@ -153,14 +153,14 @@ test("signs in with an emailed code and returns to the requested page", async ({
   await expect(page.getByRole("status")).toHaveText(/Sent/);
   expect(await readSignInCode(db, email)).toBe(code);
 
+  // Filling the last box signs in.
   await page.getByLabel("Code").fill(code);
-  await page.getByRole("button", { name: "Sign in" }).click();
 
   await expect(page).toHaveURL("/seen");
 
   // Signing out ends the session: protected pages redirect again.
   await page.goto("/");
-  await expect(page.getByText(`Signed in as ${email}`)).toBeVisible();
+  await expect(page.getByText(email)).toBeVisible();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL("/sign-in");
   await page.goto("/seen");

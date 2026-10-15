@@ -40,8 +40,8 @@ export async function signIn(page: Page, db: Db, email: string): Promise<void> {
   await page.getByLabel("Email").fill(email);
   await page.getByRole("button", { name: "Email me a code" }).click();
   await expect(page.getByText("We sent a 6-digit code")).toBeVisible();
+  // The sixth digit submits the code; there's no button to press.
   await page.getByLabel("Code").fill(await readSignInCode(db, email));
-  await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL("/");
 }
 

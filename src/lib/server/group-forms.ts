@@ -1,14 +1,15 @@
 import { type ActionFailure, fail, redirect } from "@sveltejs/kit";
+import { z } from "zod";
 
 import { inviteCodeSchema } from "#lib/group-fields.ts";
 import { db } from "#lib/server/db/index.ts";
 import { RELOAD } from "#lib/server/forms.ts";
+import { readForm } from "#lib/server/forms.ts";
 import { type GroupOutcome, previewInvite } from "#lib/server/groups.ts";
+// Shared by the group pages' form actions.
 import { requireUser } from "#lib/server/require-user.ts";
 
-// Shared by the group pages' form actions.
-
-export { readForm } from "#lib/server/forms.ts";
+export { readForm };
 
 export const INACTIVE_CODE = "That's not an active invite code.";
 
@@ -52,7 +53,7 @@ export function refusalMessage(
 }
 
 /**
- * The "Join with a code" form's action (home page and dead-invite page).
+ * The invite code form's action (the Join a group page and dead invite links).
  * A code that works goes to its invite page (or straight to the group for a
  * member); anything else stays on the form with one message. Answers with
  * `codeError` so it can't be confused with another form's `message`.
@@ -83,4 +84,39 @@ export async function findInvite({
     303,
     preview.isMember ? `/groups/${preview.id}` : `/join/${code.data}`
   );
+}
+
+/** What a group screen's form action needs from Kit's request event. */
+export interface GroupActionEvent {
+  request: Request;
+  locals: App.Locals;
+  params: { groupId: string };
+}
+
+/**
+ * Runs one group change from a group screen's form: reads the form, then
+ * applies `change` to the group in the URL as the signed-in user. Leaving
+ * or deleting ends on the home page; everything else reloads the screen.
+ */
+export async function groupAction<T extends z.ZodObject>(
+  { request, locals, params }: GroupActionEvent,
+  schema: T,
+  change: (
+    input: z.output<T> & { userId: string; groupId: string }
+  ) => Promise<GroupOutcome>,
+  { thenHome = false } = {}
+) {
+  const user = requireUser(locals);
+  const groupId = z.uuid().safeParse(params.groupId);
+  if (!groupId.success) {
+    return fail(404, { message: refusalMessage("not_found") });
+  }
+  const form = await readForm(request, schema);
+  if (!form.ok) return form.failure;
+
+  const failed = refusal(
+    await change({ ...form.data, userId: user.id, groupId: groupId.data })
+  );
+  if (failed !== null) return failed;
+  if (thenHome) redirect(303, "/");
 }

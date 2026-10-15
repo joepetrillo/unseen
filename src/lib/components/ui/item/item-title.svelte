@@ -15,7 +15,7 @@
   bind:this={ref}
   data-slot="item-title"
   class={cn(
-    "line-clamp-1 flex w-fit items-center gap-2 text-base leading-snug font-medium underline-offset-4",
+    "line-clamp-1 flex w-fit items-center gap-2 text-base leading-snug font-medium text-balance underline-offset-4",
     className
   )}
   {...restProps}
