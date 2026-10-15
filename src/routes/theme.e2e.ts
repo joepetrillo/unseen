@@ -40,7 +40,8 @@ test("the appearance pick follows the device, sticks, and paints first", async (
   await expect(html).toHaveClass(/dark/);
 
   // It's there before the app's code runs: with every app script blocked,
-  // only the one in app.html can set it. No flash of the wrong theme.
+  // only the one in app.html can set it, and the server drew the toggle
+  // already showing it. No flash of the wrong theme or the wrong pick.
   await page.emulateMedia({ colorScheme: "light" });
   let blocked = 0;
   await page.route("**/_app/immutable/**/*.js", (route) => {
@@ -49,6 +50,11 @@ test("the appearance pick follows the device, sticks, and paints first", async (
   });
   await page.reload();
   await expect(html).toHaveClass(/dark/);
+  await expect(page.getByRole("radio", { name: "Dark" })).toHaveAttribute(
+    "aria-checked",
+    "true"
+  );
+  await expect(page.getByText("Always dark")).toBeVisible();
   expect(blocked).toBeGreaterThan(0);
   await page.unrouteAll();
 
