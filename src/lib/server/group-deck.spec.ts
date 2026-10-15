@@ -733,6 +733,25 @@ describe("polling", () => {
     expect(await changed()).toBe("unchanged");
   });
 
+  it("notices a Not seen expiring, which writes nothing", async () => {
+    const film = await movie(world);
+    const sam = await join(world.groupId, "Sam");
+    await answer(world, world.me, film, "not_seen");
+    await answer(world, sam, film, "not_seen");
+    const limit = NOT_SEEN_DAYS * 24 * 60;
+    await age(sam, film, limit - 1);
+    const before = await state(world, world.me);
+    expect(before.matchCount).toBe(1);
+
+    // Moves Sam's answer past its expiry without bumping any counter, as
+    // the passing of time does.
+    await age(sam, film, limit + 1);
+    const reply = await poll(world.me, before.fingerprint);
+    expect(reply.status).toBe("changed");
+    if (reply.status !== "changed") return;
+    expect(reply.state.matchCount).toBe(0);
+  });
+
   it("ends for someone no longer in the group", async () => {
     const sam = await join(world.groupId, "Sam");
     const { fingerprint } = await state(world, sam);
