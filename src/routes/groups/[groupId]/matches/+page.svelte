@@ -123,7 +123,7 @@
   {#if data.waitingOn.length > 0}
     <section class="mt-10" aria-labelledby="almost-heading">
       <h2 id="almost-heading" class="text-xl font-semibold">Almost</h2>
-      <p class="mt-1 mb-3 text-muted-foreground">
+      <p class="mt-1 mb-3 text-balance text-muted-foreground">
         Not matches yet: these wait on someone's answer.
       </p>
       <ListGroup>

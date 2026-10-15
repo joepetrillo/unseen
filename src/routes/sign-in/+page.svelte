@@ -150,7 +150,7 @@
       </Field.Group>
     </form>
   {:else}
-    <p class="mb-6">
+    <p class="mb-6 text-balance">
       We sent a 6-digit code to <strong class="break-all">{email}</strong>. It
       expires in 5 minutes.
     </p>

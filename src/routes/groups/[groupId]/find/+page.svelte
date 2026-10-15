@@ -140,7 +140,7 @@
 
   <main class="flex min-h-0 flex-1 flex-col items-center justify-center py-4">
     {#if deck.refused !== null}
-      <div class="text-center" role="alert">
+      <div class="text-center text-balance" role="alert">
         <p class="text-lg font-semibold">{deck.refused}</p>
         <Button class="mt-4" onclick={() => refreshAll()}>Reload</Button>
       </div>
@@ -183,7 +183,7 @@
           </div>
         {/each}
       </div>
-      <div class="mt-4 w-full text-center" aria-live="polite">
+      <div class="mt-4 w-full text-center text-balance" aria-live="polite">
         <h1 class="line-clamp-2 text-2xl font-bold tracking-tight">
           {deck.card.title}
         </h1>
@@ -197,7 +197,7 @@
     {:else if deck.waitingOn.length > 0}
       <!-- Never suggest other preferences here: the movies exist, they
              just need other people's answers. -->
-      <div class="text-center" aria-live="polite">
+      <div class="text-center text-balance" aria-live="polite">
         <p class="text-lg font-semibold">You're caught up</p>
         <p class="mt-2 text-muted-foreground">
           Waiting for {listNames(deck.waitingOn)} to answer.
@@ -207,7 +207,7 @@
         </div>
       </div>
     {:else}
-      <div class="text-center">
+      <div class="text-center text-balance">
         <p class="text-lg font-semibold">
           {hasPreferences(data.preferences)
             ? "That's every movie that fits your preferences."

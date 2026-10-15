@@ -102,7 +102,7 @@
     <h2 id="leave-heading" class="text-xl font-semibold">
       {isOwner ? "Leave or delete" : "Leave"}
     </h2>
-    <p class="mt-1 mb-4 text-muted-foreground">
+    <p class="mt-1 mb-4 text-balance text-muted-foreground">
       {#if nextOwner === undefined}
         You're the only one here, so leaving deletes the group.
       {:else if isOwner}

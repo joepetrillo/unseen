@@ -65,7 +65,7 @@
   <section aria-labelledby="groups-heading">
     <h2 id="groups-heading" class="mb-3 text-xl font-semibold">Your groups</h2>
     {#if data.groups.length === 0}
-      <p class="mb-6 text-muted-foreground">
+      <p class="mb-6 text-balance text-muted-foreground">
         You're not in a group yet. Start one for your movie nights, or join a
         friend's.
       </p>

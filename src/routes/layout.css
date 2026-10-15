@@ -126,6 +126,18 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Keeps a single word from ending up alone on a paragraph's last line.
+       It's inherited, so a block marked text-balance passes that down too. */
+    text-wrap: pretty;
+  }
+  /* Even line lengths, so a heading never wraps just its last word. */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    text-wrap: balance;
   }
   html {
     @apply font-sans;

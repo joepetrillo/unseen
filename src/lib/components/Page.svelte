@@ -33,7 +33,7 @@
   <header class={[back ? "mt-3" : "mt-6", "mb-8"]}>
     <h1 class="text-3xl font-bold tracking-tight break-words">{title}</h1>
     {#if description}
-      <p class="mt-2 text-muted-foreground">{description}</p>
+      <p class="mt-2 text-balance text-muted-foreground">{description}</p>
     {/if}
   </header>
   {@render children()}

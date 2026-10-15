@@ -106,7 +106,7 @@
       </form>
     {/if}
     <!-- Polite: announced after whatever the screen reader is saying. -->
-    <p class="text-center text-sm empty:hidden" aria-live="polite">
+    <p class="text-center text-sm text-balance empty:hidden" aria-live="polite">
       {status}
     </p>
     {#if reset.error}
