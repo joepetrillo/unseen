@@ -20,6 +20,7 @@
   const id = $props.id();
 
   let code = $state("");
+  let finding = $state(false);
   const notInCode = new RegExp(`[^${INVITE_CODE_ALPHABET}]`, "g");
 
   // Rewrites what was typed or pasted into something that could be a code:
@@ -43,17 +44,24 @@
 <form
   method="POST"
   action="?/find"
-  use:enhance={() =>
-    // Keep the wrong code visible next to its error.
-    ({ update }) =>
-      update({ reset: false })}
+  use:enhance={() => {
+    finding = true;
+    return async ({ update }) => {
+      try {
+        // Keep the wrong code visible next to its error.
+        await update({ reset: false });
+      } finally {
+        finding = false;
+      }
+    };
+  }}
 >
-  <Field.Field data-invalid={error !== undefined}>
-    <Field.Label for="{id}-code">Join with a code</Field.Label>
-    <div class="flex gap-3">
+  <Field.Group>
+    <Field.Field data-invalid={error !== undefined}>
+      <Field.Label for="{id}-code">Invite code</Field.Label>
       <Input
         id="{id}-code"
-        class="max-w-44 font-mono tracking-[0.3em] uppercase"
+        class="h-14 text-center font-mono text-2xl tracking-[0.3em] uppercase"
         name="code"
         value={code}
         oninput={keepCodeCharacters}
@@ -62,13 +70,16 @@
         autocomplete="off"
         autocapitalize="characters"
         spellcheck="false"
+        enterkeyhint="go"
         aria-invalid={error !== undefined}
         aria-describedby={error === undefined ? undefined : `${id}-error`}
       />
-      <Button type="submit" variant="secondary">Join</Button>
-    </div>
-    {#if error}
-      <Field.Error id="{id}-error">{error}</Field.Error>
-    {/if}
-  </Field.Field>
+      {#if error}
+        <Field.Error id="{id}-error">{error}</Field.Error>
+      {/if}
+    </Field.Field>
+    <Button type="submit" size="lg" disabled={finding}>
+      {finding ? "Checking…" : "Continue"}
+    </Button>
+  </Field.Group>
 </form>

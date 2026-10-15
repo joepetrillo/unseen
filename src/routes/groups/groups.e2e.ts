@@ -94,14 +94,15 @@ test("a second account joins by link, a third by code", async ({ browser }) => {
     /Sam\s+\(you\)/,
   ]);
 
-  // By code, typed loosely on the home page.
+  // By code, typed loosely on the Join a group screen.
   const third = await newPerson(browser);
+  await third.getByRole("link", { name: "Join a group" }).click();
   await third
-    .getByLabel("Join with a code")
+    .getByLabel("Invite code")
     .fill(`${code.slice(0, 3).toLowerCase()} ${code.slice(3)}`);
   // Lowercase and the space are cleaned up as it's typed.
-  await expect(third.getByLabel("Join with a code")).toHaveValue(code);
-  await third.getByRole("button", { name: "Join", exact: true }).click();
+  await expect(third.getByLabel("Invite code")).toHaveValue(code);
+  await third.getByRole("button", { name: "Continue" }).click();
   await expect(third).toHaveURL(`/join/${code}`);
   // The nickname field remembers nothing yet for a new account.
   await third.getByLabel("What should this group call you?").fill("Alex");
@@ -190,15 +191,15 @@ test("leaving hands ownership on; the owner can reset the invite", async ({
     "That's not an active invite code."
   );
 
-  // Typed on the home page, it stays there with the same message.
-  await owner.goto("/");
-  const input = owner.getByLabel("Join with a code");
+  // Typed on the Join a group screen, it stays there with the same message.
+  await owner.goto("/join");
+  const input = owner.getByLabel("Invite code");
   await input.fill(code);
-  await owner.getByRole("button", { name: "Join", exact: true }).click();
+  await owner.getByRole("button", { name: "Continue" }).click();
   await expect(owner.getByRole("alert")).toHaveText(
     "That's not an active invite code."
   );
-  await expect(owner).toHaveURL("/");
+  await expect(owner).toHaveURL("/join");
   await expect(input).toHaveValue(code);
 });
 

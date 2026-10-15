@@ -213,15 +213,20 @@ test("two people with different preferences reach a match from the group page", 
   );
   await matchMenu(alex, title(comedy, 0), "We watched this");
   await expect(matchRows(alex)).toHaveCount(0);
-  // It's on the group's Watched screen, with Undo.
+  // It's on the group's Watched screen, where Remove takes it back.
   await alex.getByRole("link", { name: "Movie night" }).click();
   await alex.getByRole("link", { name: /^Watched/ }).click();
   await alex
-    .getByRole("button", { name: `We haven't watched ${title(comedy, 0)}` })
+    .getByRole("button", { name: `Remove ${title(comedy, 0)}` })
     .click();
   await expect(
-    alex.getByRole("button", { name: `We haven't watched ${title(comedy, 0)}` })
+    alex.getByRole("button", { name: `Remove ${title(comedy, 0)}` })
   ).toBeHidden();
+  // A match again, which the home page counts on the group's row.
+  await alex.goto("/");
+  await expect(alex.getByRole("link", { name: /^Movie night/ })).toContainText(
+    "3 people · 1 match"
+  );
 });
 
 test("answers alone with undo and a correction", async ({ page }) => {

@@ -107,12 +107,13 @@
 <svelte:head><title>Find a movie · Vunu</title></svelte:head>
 
 <!-- A full-screen layout (not Page): the card takes whatever height the
-       header and buttons leave. dvh follows Safari's toolbar as it hides. -->
+       header and buttons leave. dvh follows Safari's toolbar as it hides.
+       The top padding matches Page's, so the back link doesn't jump. -->
 <!-- No link preloading: matches change with every answer, and data
        fetched when a link is touched could be stale by the time it opens. -->
 <div
   data-sveltekit-preload-data="off"
-  class="mx-auto flex h-dvh w-full max-w-md flex-col pt-[max(env(safe-area-inset-top),0.75rem)] pr-[max(env(safe-area-inset-right),1.25rem)] pb-[max(env(safe-area-inset-bottom),1rem)] pl-[max(env(safe-area-inset-left),1.25rem)]"
+  class="mx-auto flex h-dvh w-full max-w-md flex-col pt-[max(env(safe-area-inset-top),1.5rem)] pr-[max(env(safe-area-inset-right),1.25rem)] pb-[max(env(safe-area-inset-bottom),1rem)] pl-[max(env(safe-area-inset-left),1.25rem)]"
 >
   <header class="flex items-center justify-between gap-3">
     <Button href={groupHref} variant="ghost" size="sm" class="-ml-3 min-w-0">

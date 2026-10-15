@@ -117,7 +117,12 @@
 
 <svelte:head><title>Sign in · Vunu</title></svelte:head>
 
-<Page title="Sign in to Vunu">
+<Page
+  title="Sign in to Vunu"
+  description={step === "email"
+    ? "We'll email you a code. No password needed."
+    : undefined}
+>
   {#if step === "email"}
     <!-- Before hydration, POST keeps sensitive fields out of URLs/logs. -->
     <form method="POST" onsubmit={submitEmail}>

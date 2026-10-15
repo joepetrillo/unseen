@@ -9,7 +9,7 @@ vi.mock("$app/forms", () => ({ enhance: () => ({}) }));
 
 it("keeps only what can be in a code, uppercased, six at most", async () => {
   await render(JoinCodeForm, {});
-  const input = page.getByLabelText("Join with a code");
+  const input = page.getByLabelText("Invite code");
 
   await userEvent.click(input);
   // 0, O, 1, I, L and punctuation never appear in codes.
@@ -19,7 +19,7 @@ it("keeps only what can be in a code, uppercased, six at most", async () => {
 
 it("cleans up a pasted code", async () => {
   await render(JoinCodeForm, {});
-  const input = page.getByLabelText("Join with a code");
+  const input = page.getByLabelText("Invite code");
   // One input event with the whole value, like a paste.
   await userEvent.fill(input, " k7q-m2x ");
   await expect.element(input).toHaveValue("K7QM2X");
@@ -31,6 +31,6 @@ it("shows the error next to the field", async () => {
     .element(page.getByRole("alert"))
     .toHaveTextContent("That's not an active invite code.");
   await expect
-    .element(page.getByLabelText("Join with a code"))
+    .element(page.getByLabelText("Invite code"))
     .toHaveAttribute("aria-invalid", "true");
 });

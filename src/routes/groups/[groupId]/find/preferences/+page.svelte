@@ -6,6 +6,7 @@
   import { Button } from "#lib/components/ui/button/index.ts";
   import * as Field from "#lib/components/ui/field/index.ts";
   import { preferencesToQuery } from "#lib/deck-fields.ts";
+  import { dropEmptyFields } from "#lib/drop-empty-fields.ts";
 
   import type { PageProps } from "./$types";
 
@@ -38,7 +39,7 @@
   <!-- A GET form: submitting navigates to the deck with the fields in its
        URL query, like a search box. Kit turns it into a client-side
        navigation, so the deck's load runs with the new preferences. -->
-  <form method="GET" action={deckHref}>
+  <form method="GET" action={deckHref} onformdata={dropEmptyFields}>
     <Field.Group>
       <PreferenceFields genres={data.genres} initial={data.preferences} />
     </Field.Group>

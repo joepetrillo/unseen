@@ -56,9 +56,13 @@
     </form>
   </Page>
 {:else}
-  <!-- A wrong or reset code gets the same form as the home page, with
-       the same message, so the person can try another code. -->
-  <Page title="Join a group" back={{ href: resolve("/"), label: "Home" }}>
+  <!-- A wrong or reset code gets the Join a group screen (/join), with the
+       same message as a typed code, so the person can try another. -->
+  <Page
+    title="Join a group"
+    description="Ask someone in the group for its invite code or link."
+    back={{ href: resolve("/"), label: "Home" }}
+  >
     <JoinCodeForm error={form?.codeError ?? data.message} />
   </Page>
 {/if}

@@ -53,7 +53,7 @@ export function refusalMessage(
 }
 
 /**
- * The "Join with a code" form's action (home page and dead-invite page).
+ * The invite code form's action (the Join a group page and dead invite links).
  * A code that works goes to its invite page (or straight to the group for a
  * member); anything else stays on the form with one message. Answers with
  * `codeError` so it can't be confused with another form's `message`.

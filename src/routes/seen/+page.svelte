@@ -8,6 +8,7 @@
   import { Input } from "#lib/components/ui/input/index.ts";
   import * as Item from "#lib/components/ui/item/index.ts";
   import { NativeSelect } from "#lib/components/ui/native-select/index.ts";
+  import { dropEmptyFields } from "#lib/drop-empty-fields.ts";
 
   import type { PageProps } from "./$types";
   import SeenButton from "./SeenButton.svelte";
@@ -45,14 +46,6 @@
       data.search.decade !== undefined
   );
 
-  // Fires as the search form is turned into a URL. Without it, empty fields
-  // would show up as `title=&genre=`.
-  function dropEmptyFields(event: FormDataEvent) {
-    for (const [name, value] of [...event.formData]) {
-      if (value === "") event.formData.delete(name);
-    }
-  }
-
   // Picking a genre or decade searches right away.
   function submitOnChange(event: Event & { currentTarget: HTMLSelectElement }) {
     event.currentTarget.form?.requestSubmit();
@@ -66,7 +59,7 @@
   description="Vunu never deals you a movie on your list."
   back={{ href: resolve("/"), label: "Home" }}
 >
-  <!-- Links styled as an iOS segmented control: each tab is its own URL. -->
+  <!-- Links styled like shadcn's Tabs: each tab is its own URL. -->
   <nav class="flex gap-1 rounded-4xl bg-muted p-1" aria-label="Lists">
     {#each tabs as tab (tab.scope)}
       <a

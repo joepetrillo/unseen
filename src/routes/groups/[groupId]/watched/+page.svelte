@@ -22,7 +22,7 @@
   title="Watched"
   description={data.watched.length === 0
     ? "Nothing yet. After movie night, open the match's menu and pick We watched this."
-    : "Movies this group marked as watched. They won't come up again."}
+    : "Movies this group marked as watched. They won't come up again unless you remove them."}
   back={{
     href: resolve("/groups/[groupId]", { groupId: data.group.id }),
     label: data.group.name,
@@ -59,14 +59,16 @@
                 use:enhance={unwatched.submit}
               >
                 <input type="hidden" name="movieId" value={movie.id} />
+                <!-- Like the seen list's button: the label starts with the
+                     visible word, so voice control finds it too. -->
                 <Button
                   type="submit"
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
                   disabled={unwatched.saving}
-                  aria-label={`We haven't watched ${movie.title}`}
+                  aria-label={`Remove ${movie.title}`}
                 >
-                  Undo
+                  Remove
                 </Button>
               </form>
             </Item.Actions>

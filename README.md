@@ -71,10 +71,10 @@ Stop/remove the example database with `docker stop vunu-test-db`. Never assign a
 | OTP abuse limit and delivery | `src/lib/server/sign-in-code-limit.ts`, `email.ts`; sign-in UI in `src/routes/sign-in/` |
 | Seen-list UI and validation | `src/routes/seen/+page.svelte`, `+page.server.ts`, `SeenButton.svelte` |
 | Catalog/seen-list reads | `src/lib/server/movie-search.ts` |
-| Groups, members, invites | `src/lib/server/groups.ts` (only write path), `group-forms.ts`; pages in `src/routes/groups/`, `src/routes/join/`; field rules in `src/lib/group-fields.ts` |
+| Groups, members, invites | `src/lib/server/groups.ts` (only write path), `group-forms.ts`; pages in `src/routes/groups/`, `src/routes/join/` (`/join` takes a typed code; `/join/[code]` is an invite link); field rules in `src/lib/group-fields.ts` |
 | Group deck: answers, undo, matches, We watched this | `src/lib/server/group-deck.ts` (only write path), `deck-forms.ts`; deck in `src/routes/groups/[groupId]/find/` (save queue in `deck.svelte.ts`, poll, preferences); the group page is a hub (`+layout.server.ts` checks membership once) with matches, watched, members, and settings screens under it; preference rules in `src/lib/deck-fields.ts`; polling in `src/lib/deck-updates.ts` |
 | Atomic, idempotent writes | `src/lib/server/actions.ts`, `seen-list.ts`, `groups.ts`, `group-deck.ts`; browser action IDs in `src/lib/action-form.svelte.ts` |
-| UI components and layout | `src/lib/components/ui/` (shadcn-svelte, Maia style; ours to edit), `Page.svelte`, `ListGroup.svelte`; theme in `src/routes/layout.css` |
+| UI components and layout | `src/lib/components/ui/` (shadcn-svelte, Maia style; ours to edit), `Page.svelte`, `ListGroup.svelte`, `NavRow.svelte`; error page in `src/routes/+error.svelte`; theme in `src/routes/layout.css` |
 | Database schema, relations, pool/TLS | `src/lib/server/db/`; migrations in `drizzle/` |
 | Development catalog import | `scripts/seed-movies.ts`, `src/lib/server/tmdb/` |
 | Test fixtures and isolated configuration | `src/lib/server/testing/`; colocated `*.spec.ts` and `*.e2e.ts` |
