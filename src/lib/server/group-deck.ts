@@ -464,8 +464,9 @@ export async function countMatches(
  */
 export async function listWaitingOn(
   db: Db | Transaction,
-  groupId: string
-): Promise<{ movie: MovieCard; waitingOn: string[] }[]> {
+  groupId: string,
+  viewerId: string
+): Promise<{ movie: MovieCard; waitingOnYou: boolean; waitingOn: string[] }[]> {
   const memberCount = db
     .select({ n: sql`count(*)` })
     .from(groupMembers)
@@ -504,7 +505,11 @@ export async function listWaitingOn(
 
   // Who hasn't answered each: the members without a Not seen still counting.
   const missing = await db
-    .select({ movieId: movies.id, nickname: groupMembers.nickname })
+    .select({
+      movieId: movies.id,
+      userId: groupMembers.userId,
+      nickname: groupMembers.nickname,
+    })
     .from(groupMembers)
     .innerJoin(
       movies,
@@ -532,12 +537,18 @@ export async function listWaitingOn(
     )
     .orderBy(asc(groupMembers.nickname));
   const cards = await withGenres(db, rows);
-  return cards.map((movie) => ({
-    movie,
-    waitingOn: missing
-      .filter((row) => row.movieId === movie.id)
-      .map((row) => row.nickname),
-  }));
+  // The viewer is told apart ("Waiting on you") rather than by nickname,
+  // which another member could share.
+  return cards.map((movie) => {
+    const members = missing.filter((row) => row.movieId === movie.id);
+    return {
+      movie,
+      waitingOnYou: members.some((row) => row.userId === viewerId),
+      waitingOn: members
+        .filter((row) => row.userId !== viewerId)
+        .map((row) => row.nickname),
+    };
+  });
 }
 
 /** The group's watched movies, most recently marked first. */

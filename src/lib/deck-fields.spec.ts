@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  describeMovie,
   describePreferences,
   NO_PREFERENCES,
   preferencesFromQuery,
   preferencesToQuery,
 } from "#lib/deck-fields.ts";
+import { NO_BREAK_SPACE } from "#lib/format.ts";
 
 // Preferences live only in the deck's URL, so the query is their storage
 // format: it must round-trip, and a bad link must still open the deck.
@@ -67,5 +69,28 @@ describe("describePreferences", () => {
     expect(
       describePreferences({ ...NO_PREFERENCES, minYear: 2000 }, genres)
     ).toBe("2000 or later");
+  });
+});
+
+describe("describeMovie", () => {
+  const movie = {
+    id: 1,
+    title: "Arrival",
+    year: 2016,
+    runtime: 116,
+    posterPath: null,
+    genres: ["Drama", "Science Fiction", "Mystery", "Thriller"],
+  };
+
+  it("breaks lines only between parts, never inside the runtime", () => {
+    // No-break spaces shown as "_".
+    const breaks = describeMovie(movie).replaceAll(NO_BREAK_SPACE, "_");
+    expect(breaks).toBe("2016_· 1_h_56_min_· Drama, Science Fiction, Mystery");
+  });
+
+  it("skips what's missing", () => {
+    expect(
+      describeMovie({ ...movie, year: null, runtime: null, genres: [] })
+    ).toBe("");
   });
 });

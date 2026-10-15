@@ -46,7 +46,7 @@
         <li>
           <Item.Root class="flex-nowrap rounded-none">
             <Item.Content class="min-w-0">
-              <Item.Title class="line-clamp-none break-words">
+              <Item.Title class="line-clamp-none wrap-anywhere">
                 {member.nickname}
                 {#if member.userId === group.me.userId}
                   <span class="font-normal text-muted-foreground">(you)</span>

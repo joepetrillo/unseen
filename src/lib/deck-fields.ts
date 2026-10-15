@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { joinDetails, NO_BREAK_SPACE } from "#lib/format.ts";
+
 // Rules for the group deck's preferences, cards, and replies. Shared by the
 // server (which validates) and the pages (which offer the same choices and
 // describe them).
@@ -161,6 +163,18 @@ export const movieCardSchema = z.object({
   genres: z.array(z.string()),
 });
 export type MovieCard = z.infer<typeof movieCardSchema>;
+
+/** "1999 · 2 h 15 min · Drama, Comedy": the line under a movie's title. */
+export function describeMovie(movie: MovieCard): string {
+  return joinDetails([
+    movie.year === null ? null : String(movie.year),
+    // "2 h 15 min" stays on one line too.
+    movie.runtime === null
+      ? null
+      : formatRuntime(movie.runtime).replaceAll(" ", NO_BREAK_SPACE),
+    movie.genres.slice(0, 3).join(", ") || null,
+  ]);
+}
 
 /** TMDB's US watch page: where TMDB lists streaming, rental, and purchase. */
 export function whereToWatchUrl(movieId: number): string {

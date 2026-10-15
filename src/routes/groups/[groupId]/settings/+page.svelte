@@ -53,8 +53,11 @@
     <form method="POST" action="?/nickname" use:enhance={nickname.submit}>
       <Field.Field>
         <Field.Label for="nickname">Your name in this group</Field.Label>
-        <div class="flex gap-3">
+        <!-- The button drops below once large text leaves the field too
+             narrow to read. -->
+        <div class="flex flex-wrap gap-3">
           <Input
+            class="min-w-40 flex-1"
             id="nickname"
             name="nickname"
             value={group.me.nickname}
@@ -76,8 +79,9 @@
       <form method="POST" action="?/rename" use:enhance={rename.submit}>
         <Field.Field>
           <Field.Label for="group-name">Group name</Field.Label>
-          <div class="flex gap-3">
+          <div class="flex flex-wrap gap-3">
             <Input
+              class="min-w-40 flex-1"
               id="group-name"
               name="name"
               value={group.name}

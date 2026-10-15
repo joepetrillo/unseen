@@ -9,6 +9,7 @@
   import * as Item from "#lib/components/ui/item/index.ts";
   import { NativeSelect } from "#lib/components/ui/native-select/index.ts";
   import { dropEmptyFields } from "#lib/drop-empty-fields.ts";
+  import { formatCount, joinDetails } from "#lib/format.ts";
 
   import type { PageProps } from "./$types";
   import SeenButton from "./SeenButton.svelte";
@@ -36,7 +37,7 @@
   }
 
   let tabs = $derived([
-    { scope: "mine", label: `Your list (${String(data.seenCount)})` },
+    { scope: "mine", label: `Your list (${formatCount(data.seenCount)})` },
     { scope: "all", label: "All movies" },
   ] as const);
 
@@ -87,8 +88,9 @@
     {#if data.search.scope === "all"}
       <input type="hidden" name="scope" value="all" />
     {/if}
-    <div class="flex gap-3">
+    <div class="flex flex-wrap gap-3">
       <Input
+        class="min-w-40 flex-1"
         type="search"
         name="title"
         value={data.search.title}
@@ -99,9 +101,11 @@
       />
       <Button type="submit" variant="secondary">Search</Button>
     </div>
-    <div class="grid grid-cols-2 gap-3">
+    <!-- Side by side, or stacked when a narrow phone would cut off
+         "Any decade". -->
+    <div class="flex flex-wrap gap-3">
       <NativeSelect
-        class="w-full"
+        class="min-w-36 flex-1"
         name="genre"
         aria-label="Genre"
         onchange={submitOnChange}
@@ -114,7 +118,7 @@
         {/each}
       </NativeSelect>
       <NativeSelect
-        class="w-full"
+        class="min-w-36 flex-1"
         name="decade"
         aria-label="Decade"
         onchange={submitOnChange}
@@ -142,14 +146,14 @@
               />
             </Item.Media>
             <Item.Content class="min-w-0">
-              <Item.Title class="block w-full truncate"
+              <Item.Title class="line-clamp-2" title={movie.title}
                 >{movie.title}</Item.Title
               >
               <Item.Description>
-                {movie.year ?? "Year unknown"}
-                {#if data.search.scope === "all" && movie.seen}
-                  · Seen
-                {/if}
+                {joinDetails([
+                  movie.year === null ? "Year unknown" : String(movie.year),
+                  data.search.scope === "all" && movie.seen ? "Seen" : null,
+                ])}
               </Item.Description>
             </Item.Content>
             <Item.Actions>

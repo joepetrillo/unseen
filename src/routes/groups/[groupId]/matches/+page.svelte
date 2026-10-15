@@ -13,6 +13,7 @@
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.ts";
   import * as Item from "#lib/components/ui/item/index.ts";
   import type { MovieCard } from "#lib/deck-fields.ts";
+  import { listNames } from "#lib/format.ts";
 
   import type { PageProps } from "./$types";
 
@@ -33,8 +34,13 @@
   const correction = new ActionForm({ scope });
   let error = $derived(watched.error ?? correction.error);
 
-  // "Sam", "Sam and Alex", "Sam, Alex, and Jo".
-  const names = new Intl.ListFormat("en", { type: "conjunction" });
+  // "you, Sam, Alex, and 95 others": you first, since that's the one
+  // answer you can give.
+  function waitingOn(row: PageProps["data"]["waitingOn"][number]): string {
+    return listNames(
+      row.waitingOnYou ? ["you", ...row.waitingOn] : row.waitingOn
+    );
+  }
 </script>
 
 <svelte:head><title>Matches · {data.group.name} · Vunu</title></svelte:head>
@@ -140,7 +146,7 @@
               <Item.Content class="min-w-0">
                 <Item.Title class="line-clamp-2">{row.movie.title}</Item.Title>
                 <Item.Description>
-                  Waiting on {names.format(row.waitingOn)}
+                  Waiting on {waitingOn(row)}
                 </Item.Description>
               </Item.Content>
             </Item.Root>

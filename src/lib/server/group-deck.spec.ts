@@ -425,14 +425,22 @@ describe("Waiting on", () => {
     const film = await movie(world);
     const single = await movie(world);
     const sam = await join(world.groupId, "Sam");
-    await join(world.groupId, "Alex");
+    const alex = await join(world.groupId, "Alex");
     await answer(world, world.me, film, "not_seen");
     await answer(world, sam, film, "not_seen");
     await answer(world, world.me, single, "not_seen");
 
-    const waiting = await listWaitingOn(db, world.groupId);
-    expect(waiting.map((row) => [row.movie.id, row.waitingOn])).toEqual([
-      [film, ["Alex"]],
+    const waiting = await listWaitingOn(db, world.groupId, world.me);
+    expect(
+      waiting.map((row) => [row.movie.id, row.waitingOnYou, row.waitingOn])
+    ).toEqual([[film, false, ["Alex"]]]);
+    // Sam sees the same movie waiting on Alex, not on themselves.
+    const fromSam = await listWaitingOn(db, world.groupId, sam);
+    expect(fromSam.map((row) => row.waitingOn)).toEqual([["Alex"]]);
+    // Alex is told it's waiting on them.
+    const fromAlex = await listWaitingOn(db, world.groupId, alex);
+    expect(fromAlex.map((row) => [row.waitingOnYou, row.waitingOn])).toEqual([
+      [true, []],
     ]);
   });
 
@@ -444,7 +452,7 @@ describe("Waiting on", () => {
     await answer(world, sam, film, "not_seen");
     await addToSeenList(db, { actionId: id(), userId: alex, movieId: film });
 
-    expect(await listWaitingOn(db, world.groupId)).toEqual([]);
+    expect(await listWaitingOn(db, world.groupId, world.me)).toEqual([]);
   });
 
   it("names who you're waiting on when you run out of cards", async () => {

@@ -14,6 +14,7 @@
   import Page from "#lib/components/Page.svelte";
   import { Button } from "#lib/components/ui/button/index.ts";
   import * as Item from "#lib/components/ui/item/index.ts";
+  import { formatCount } from "#lib/format.ts";
 
   import type { PageProps } from "./$types";
 
@@ -27,10 +28,10 @@
     const people =
       group.memberCount === 1
         ? "Just you"
-        : `${String(group.memberCount)} people`;
+        : `${formatCount(group.memberCount)} people`;
     if (group.matchCount === 0) return people;
     const matches = group.matchCount === 1 ? "match" : "matches";
-    return `${people} · ${String(group.matchCount)} ${matches}`;
+    return `${people} · ${formatCount(group.matchCount)} ${matches}`;
   }
 
   async function signOut() {

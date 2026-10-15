@@ -36,7 +36,9 @@
     <Item.Media>
       <HugeiconsIcon icon={PaintBoardIcon} class="size-5" />
     </Item.Media>
-    <Item.Content class="min-w-0">
+    <!-- Room for the description: on a narrow phone the buttons move to
+         their own line instead of squeezing it to "Same as…". -->
+    <Item.Content class="min-w-32">
       <Item.Title id="{id}-label">Appearance</Item.Title>
       <Item.Description>{described[theme.choice]}</Item.Description>
     </Item.Content>

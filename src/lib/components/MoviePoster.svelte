@@ -57,7 +57,7 @@
     role="img"
     aria-label="No poster for {title}"
     class={cn(
-      "flex aspect-2/3 w-full items-center justify-center rounded-lg bg-muted p-1 text-center text-xs text-muted-foreground",
+      "flex aspect-2/3 w-full items-center justify-center overflow-hidden rounded-lg bg-muted p-1 text-center text-xs text-muted-foreground",
       className
     )}
   >

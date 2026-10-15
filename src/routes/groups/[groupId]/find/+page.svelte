@@ -14,12 +14,12 @@
   import * as Card from "#lib/components/ui/card/index.ts";
   import { Spinner } from "#lib/components/ui/spinner/index.ts";
   import {
-    formatRuntime,
+    describeMovie,
     hasPreferences,
-    type MovieCard,
     preferencesToQuery,
     REVIEW_PROMPT_AT,
   } from "#lib/deck-fields.ts";
+  import { formatCount, listNames } from "#lib/format.ts";
 
   import type { PageProps } from "./$types";
   import { Deck } from "./deck.svelte.ts";
@@ -78,22 +78,6 @@
     });
   });
 
-  // "Sam", "Sam and Alex", "Sam, Alex, and Jo".
-  const names = new Intl.ListFormat("en", { type: "conjunction" });
-  function listNames(people: string[]): string {
-    return names.format(people);
-  }
-
-  function details(movie: MovieCard): string {
-    return [
-      movie.year === null ? null : String(movie.year),
-      movie.runtime === null ? null : formatRuntime(movie.runtime),
-      movie.genres.slice(0, 3).join(", ") || null,
-    ]
-      .filter((part) => part !== null)
-      .join(" · ");
-  }
-
   // The leaving card flies toward the side of its answer. Skipped for
   // people who ask their device for less motion.
   function leave(node: Element) {
@@ -116,13 +100,20 @@
   class="mx-auto flex h-dvh w-full max-w-md flex-col pt-[max(env(safe-area-inset-top),1.5rem)] pr-[max(env(safe-area-inset-right),1.25rem)] pb-[max(env(safe-area-inset-bottom),1rem)] pl-[max(env(safe-area-inset-left),1.25rem)]"
 >
   <header class="flex items-center justify-between gap-3">
-    <Button href={groupHref} variant="ghost" size="sm" class="-ml-3 min-w-0">
+    <!-- shrink: buttons don't by default, and a long group name would push
+         Matches off the screen. -->
+    <Button
+      href={groupHref}
+      variant="ghost"
+      size="sm"
+      class="-ml-3 min-w-0 shrink"
+    >
       <HugeiconsIcon icon={ArrowLeft01Icon} data-icon="inline-start" />
       <span class="truncate">{data.group.name}</span>
     </Button>
     <Button href={matchesHref} variant="secondary" size="sm">
       Matches
-      <Badge>{deck.matchCount}</Badge>
+      <Badge class="tabular-nums">{formatCount(deck.matchCount)}</Badge>
     </Button>
   </header>
   <!-- Your preferences for tonight; nobody else sees them. -->
@@ -187,7 +178,7 @@
         <h1 class="line-clamp-2 text-2xl font-bold tracking-tight">
           {deck.card.title}
         </h1>
-        <p class="mt-1 text-muted-foreground">{details(deck.card)}</p>
+        <p class="mt-1 text-muted-foreground">{describeMovie(deck.card)}</p>
       </div>
     {:else if !deck.exhausted || deck.waitingOn === null}
       <div class="flex items-center gap-3 text-muted-foreground">

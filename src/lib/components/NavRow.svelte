@@ -6,6 +6,7 @@
 
   import { Badge } from "#lib/components/ui/badge/index.ts";
   import * as Item from "#lib/components/ui/item/index.ts";
+  import { formatCount } from "#lib/format.ts";
 
   interface Props {
     href: ResolvedPathname;
@@ -30,16 +31,18 @@
           <Item.Media>{@render media()}</Item.Media>
         {/if}
         <Item.Content class="min-w-0">
-          <Item.Title class="break-words">{title}</Item.Title>
+          <!-- wrap-anywhere, not break-words: only it lets a name with no
+               spaces wrap instead of pushing the row wider. -->
+          <Item.Title class="wrap-anywhere">{title}</Item.Title>
           {#if description}
-            <Item.Description class="break-words"
+            <Item.Description class="wrap-anywhere"
               >{description}</Item.Description
             >
           {/if}
         </Item.Content>
         {#if count !== undefined}
           <Badge variant="secondary" class="shrink-0 tabular-nums"
-            >{count}</Badge
+            >{formatCount(count)}</Badge
           >
         {/if}
         <HugeiconsIcon

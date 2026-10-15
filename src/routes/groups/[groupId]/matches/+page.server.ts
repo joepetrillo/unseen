@@ -18,7 +18,7 @@ export const load: PageServerLoad = async ({ parent, url }) => {
   const preferences = preferencesFromQuery(url.searchParams);
   const [matches, waitingOn] = await Promise.all([
     listMatches(db, group.id, preferences),
-    listWaitingOn(db, group.id),
+    listWaitingOn(db, group.id, group.me.userId),
   ]);
   return { matches, waitingOn, query: url.searchParams.toString() };
 };

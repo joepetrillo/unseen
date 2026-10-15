@@ -6,7 +6,7 @@
   import { buttonVariants } from "#lib/components/ui/button/index.ts";
   import * as Item from "#lib/components/ui/item/index.ts";
   import {
-    formatRuntime,
+    describeMovie,
     type MovieCard,
     whereToWatchUrl,
   } from "#lib/deck-fields.ts";
@@ -21,16 +21,6 @@
   }
 
   let { matches, actions }: Props = $props();
-
-  function details(movie: MovieCard): string {
-    return [
-      movie.year === null ? null : String(movie.year),
-      movie.runtime === null ? null : formatRuntime(movie.runtime),
-      movie.genres.slice(0, 3).join(", ") || null,
-    ]
-      .filter((part) => part !== null)
-      .join(" · ");
-  }
 </script>
 
 <ListGroup>
@@ -46,7 +36,7 @@
         </Item.Media>
         <Item.Content class="min-w-0 gap-2">
           <Item.Title class="line-clamp-2">{movie.title}</Item.Title>
-          <Item.Description>{details(movie)}</Item.Description>
+          <Item.Description>{describeMovie(movie)}</Item.Description>
           <div class="mt-1">
             <!-- rel="external": a page outside Vunu, opened in a new tab. -->
             <a

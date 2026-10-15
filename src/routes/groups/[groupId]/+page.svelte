@@ -5,6 +5,7 @@
   import NavRow from "#lib/components/NavRow.svelte";
   import Page from "#lib/components/Page.svelte";
   import { Button } from "#lib/components/ui/button/index.ts";
+  import { listNames } from "#lib/format.ts";
 
   import type { PageProps } from "./$types";
   import InviteCard from "./InviteCard.svelte";
@@ -14,9 +15,6 @@
   let group = $derived(data.group);
   let groupId = $derived({ groupId: group.id });
   let alone = $derived(group.members.length === 1);
-
-  // "Sam", "Sam and Alex", "Sam, Alex, and Jo".
-  const names = new Intl.ListFormat("en", { type: "conjunction" });
 </script>
 
 <svelte:head><title>{group.name} · Vunu</title></svelte:head>
@@ -66,7 +64,7 @@
       <NavRow
         href={resolve("/groups/[groupId]/members", groupId)}
         title="Members"
-        description={names.format(group.members.map((m) => m.nickname))}
+        description={listNames(group.members.map((m) => m.nickname))}
         count={group.members.length}
       />
       <NavRow
