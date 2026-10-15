@@ -1,12 +1,12 @@
 # Vunu
 
-Finds movies nobody in a group has seen. The current application has email-code sign-in, a movie catalog, a personal seen list with search, filters, and pagination, groups joined by invite link or code, and watch sessions for one or more people (deal, answer Seen / Not seen, undo, shortlist, live updates between phones, Change filters). Session lifecycle rules (Resume / Start fresh, removal, auto-close) come next; see the [product spec](docs/PROJECT_SPEC.md).
+Finds movies nobody in a group has seen. The current application has email-code sign-in, a movie catalog, a personal seen list with search, filters, and pagination, groups joined by invite link or code, and a deck per group: everyone answers Seen / Not seen on their own phone, Not seen is remembered for 2 weeks, and a movie everyone in the group hasn't seen becomes a match (with per-visit preferences, undo, Waiting on, We watched this, and live updates between phones). See the [product spec](docs/PROJECT_SPEC.md).
 
 Live domain: [vunu.app](https://vunu.app). `www.vunu.app` redirects there. Repository: [joepetrillo/vunu](https://github.com/joepetrillo/vunu).
 
 SvelteKit 3.0.1 stable, Svelte 5, TypeScript, Drizzle 1.0.0-rc.4, Neon Postgres through `pg`, Better Auth, Resend, and Vercel's Node adapter 7.0.0. The audit fixes, stable framework upgrade, and Vunu rebrand are implemented. The [audit](docs/AUDIT.md) records historical versions, source references, verification, and rollout notes; `bun.lock` records current resolved versions. [AGENTS.md](AGENTS.md) holds contributor conventions.
 
-Stages 1–7 are done (through group sessions); stage 8 (session lifecycle) is next. Status: [Current state](docs/PROJECT_SPEC.md#current-state).
+Stages 1–7 are done; stage 8 (the group deck, which replaced watch sessions) is built and waiting to merge. Status: [Current state](docs/PROJECT_SPEC.md#current-state).
 
 ## Development setup
 
@@ -72,8 +72,8 @@ Stop/remove the example database with `docker stop vunu-test-db`. Never assign a
 | Seen-list UI and validation | `src/routes/seen/+page.svelte`, `+page.server.ts`, `SeenButton.svelte` |
 | Catalog/seen-list reads | `src/lib/server/movie-search.ts` |
 | Groups, members, invites | `src/lib/server/groups.ts` (only write path), `group-forms.ts`; pages in `src/routes/groups/`, `src/routes/join/`; field rules in `src/lib/group-fields.ts` |
-| Watch sessions: deck, answers, undo, matches | `src/lib/server/watch-sessions.ts` (only write path), `watch-session-forms.ts`; pages in `src/routes/groups/[groupId]/find/` (start) and `src/routes/sessions/` (deck, save queue in `deck.svelte.ts`, shortlist); filter rules in `src/lib/watch-fields.ts` |
-| Atomic, idempotent writes | `src/lib/server/actions.ts`, `seen-list.ts`, `groups.ts`, `watch-sessions.ts`; browser action IDs in `src/lib/action-form.svelte.ts` |
+| Group deck: answers, undo, matches, We watched this | `src/lib/server/group-deck.ts` (only write path), `deck-forms.ts`; deck in `src/routes/groups/[groupId]/find/` (save queue in `deck.svelte.ts`, poll, preferences); matches, Almost, and Watched on the group page; preference rules in `src/lib/deck-fields.ts`; polling in `src/lib/deck-updates.ts` |
+| Atomic, idempotent writes | `src/lib/server/actions.ts`, `seen-list.ts`, `groups.ts`, `group-deck.ts`; browser action IDs in `src/lib/action-form.svelte.ts` |
 | UI components and layout | `src/lib/components/ui/` (shadcn-svelte, Maia style; ours to edit), `Page.svelte`, `ListGroup.svelte`; theme in `src/routes/layout.css` |
 | Database schema, relations, pool/TLS | `src/lib/server/db/`; migrations in `drizzle/` |
 | Development catalog import | `scripts/seed-movies.ts`, `src/lib/server/tmdb/` |
@@ -100,7 +100,7 @@ Svelte's `$state` and `$derived` update component state and computed values with
 | `bun run outdated:next` | Checks remaining pinned prereleases (Drizzle ORM/Kit) without upgrading them |
 | `vercel env ls` | Lists variable names per Vercel environment, without values (read-only) |
 
-`bun install` sets up a pre-commit hook ([simple-git-hooks](https://github.com/toplenboren/simple-git-hooks), configured in `package.json`) that runs `bun run lint`. Skip it once with `git commit --no-verify`. ESLint also enforces four write paths: only `seen-list.ts` writes `seenMovies`, only `groups.ts` writes `groups`/`groupMembers`/`inviteLookupLimits`, only `watch-sessions.ts` writes `watchSessions`/`watchSessionParticipants`/`watchSessionAnswers`/`groupPastMatches`, and only `actions.ts` writes `actions` (tests are exempt).
+`bun install` sets up a pre-commit hook ([simple-git-hooks](https://github.com/toplenboren/simple-git-hooks), configured in `package.json`) that runs `bun run lint`. Skip it once with `git commit --no-verify`. ESLint also enforces four write paths: only `seen-list.ts` writes `seenMovies`, only `groups.ts` writes `groups`/`groupMembers`/`inviteLookupLimits`, only `group-deck.ts` writes `notSeenMovies`/`groupWatchedMovies`, and only `actions.ts` writes `actions` (tests are exempt). Nothing may write the retired watch-session tables.
 
 Vercel's configured build runs `db:migrate` before `build`, so a deployment writes to its selected database. New migrations must remain compatible with the preceding deployment.
 
